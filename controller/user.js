@@ -74,7 +74,7 @@ export const findUser = async (req, res) => {
       res.status(404).json({ message: "No result found." });
     }
   } catch (err) {
-    console.error("Something went wrong.");
+    return res.status(404).json({ message: "Error!!" });
   }
 };
 

@@ -4,7 +4,6 @@ import mongoose from 'mongoose';
 
 // url : /user/group/:name/create
 export const createGroup = async(req,res)=>{
-  console.log("got here");
   let admin = req.username;
   let name = req.params.name;
   let members = [admin];
