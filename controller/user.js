@@ -5,6 +5,8 @@ import { User } from "./../models/User.js";
 import { userValidation } from "./../validation/userValidation.js";
 import { deleteChat } from "./chat.js";
 import { userExitFromGroup } from "./group.js";
+import { hashInput , compareInput } from "../utils/bcrypt.js";
+import { uploadOnCloudinary } from "../utils/cloudinary.js";
 
 // function which adds new User to database (sign Up)
 // url : /user/signup
@@ -15,10 +17,22 @@ export const signupUser = async (req, res) => {
   }
   let user = await User.findOne({ username: req.body.username });
   if (user) {
-    return res.status(404).json({ message: "user already exists" });
+    return res.status(404).json({ message: "user already exists with same username" });
   }
 
-  user = new User(req.body);
+  const payload = {
+    username: req.body.username,
+    password: await hashInput(req.body.password),
+  };
+
+  const profilePhotoLocalPath = req.file ? req.file.path : "";
+
+  const profilePhotoResult = profilePhotoLocalPath ? await uploadOnCloudinary(profilePhotoLocalPath, `${req.body.username}`) : "";
+
+  if(req.body.nickName) payload.nickName = req.body.nickName;
+  if(req.body.isPrivateAccount != undefined) payload.isPrivateAccount = req.body.isPrivateAccount;
+  if(profilePhotoResult) payload.profilePhoto = profilePhotoResult.secure_url;
+  user = new User(payload);
   await user
     .save()
     .then(() => {
@@ -37,18 +51,24 @@ export const loginUser = async (req, res) => {
   try {
     await User.findOne({ username: req.body.username })
       .then((user) => {
-        if (user.password == req.body.password) {
+        if (compareInput(req.body.password, user.password)) {
           let token = createToken(user);
-          req.header.token = token;
-          return res.status(200).json({ message: "Login Successful", token : token});
+          // save token in header authentication
+          if (token) {
+            req.headers.Authorization = `Bearer ${token}`;
+            return res.status(200).json({ message: "Login Successful", token : token});
+          } else {
+            return res.status(500).json({ message: "Internal Error" });
+          }
+
         }
         return res.status(404).json({ message: "password is incorrect" });
       })
       .catch((err) => {
-        return res.status(404).json({ message: "Username is Incorrect" });
+        return res.status(404).json({ message: "Username is Incorrect", error : err });
       });
   } catch (err) {
-    return res.status(404).json({ message: "some error occured!!!" });
+    return res.status(404).json({ message: "some error occured!!!" , error : err});
   }
 };
 

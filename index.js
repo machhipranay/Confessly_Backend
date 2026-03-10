@@ -12,6 +12,8 @@ import { devAuthMiddleware } from './service/devAuth.js';
 import { createGroup, exitGroup, getGroups, getInviteCode, joinGroup, searchGroupsByName } from './controller/group.js';
 import { actionReport, dismissReport, getActionTakenReports,getPendingReports, getDismissedReports, viewReport, createReport } from './controller/report.js';
 import { createNewChat, getChatsOfGroup } from './controller/chat.js';
+import { upload } from './utils/multer.js';
+import cloudinary from 'cloudinary';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -20,7 +22,14 @@ const app = express();
 dotenv.config();
 app.use(cors());
 app.use(express.json());
-app.use(express.static(path.join(__dirname,'/public')));
+// app.use(express.static(path.join(__dirname,'/public')));
+
+cloudinary.config({ 
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY, 
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+  secure: true
+});
 
 mongoose.connect(process.env.MONGO_URL)
 .then(()=>{
@@ -48,7 +57,7 @@ app.get('/dev/reports/dismissed',devAuthMiddleware,getDismissedReports);
 app.get('/dev/reports/:reportId/view',devAuthMiddleware,viewReport);
 
 // user routers ----------------------------------------------------
-app.post('/user/signup',signupUser);
+app.post('/user/signup',upload.single('profilePhoto'), signupUser);
 app.post('/user/login', loginUser);
 app.get('/user/:input/find', findUser);
 app.get('/user/profile',userAuthMiddleware ,getSelfProfile);

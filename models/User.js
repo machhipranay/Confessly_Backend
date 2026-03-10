@@ -24,7 +24,7 @@ const userSchema = new mongoose.Schema({
 
     profilePhoto : {
         type : String,
-        default : "http://localhost:3000/public/default.jpg", // default guest photo link
+        default : "",
     },
 
     groups : {

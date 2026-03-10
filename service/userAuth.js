@@ -6,10 +6,13 @@ export const createToken = (user)=>{
 }
 
 export const userAuthMiddleware = async (req,res,next)=>{
-    let token = req.header.token;
+    // take token from authorization header
+    let token = req.headers.Authorization.split(" ")[1];
+
     if(!token){
         return res.status(404).json({message : "Token not found"});
     }
+    
     try {
         let {username} = jwt.verify(token,process.env.SECRET_KEY_USER);
         req.username = username;
