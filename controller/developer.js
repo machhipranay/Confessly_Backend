@@ -1,28 +1,35 @@
 import { Developer } from "../models/Developer.js";
 import { createToken } from "../service/devAuth.js";
+import { compareInput, hashInput } from "../utils/bcrypt.js";
 import { devValidation } from "../validation/devValidation.js";
 
 export const signupDeveloper = async (req, res) => {
-  let { error } = devValidation.validate(req.body);
+  const payload = {
+    username : req.body.username,
+    password : req.body.password
+  }
+  let { error } = devValidation.validate(payload);
   if (error) {
     return res.status(404).json({ message: error.details[0].message });
   }
 
-  let developer = await Developer.findOne({username : req.body.username});
+  let developer = await Developer.findOne({username : req.body.username}).select("-password");
   if (developer) {
     return res.status(404).json({ message: "Developer already exists" });
   }
 
-  developer = new Developer(req.body);
+  payload.password = await hashInput(req.body.password);
+
+  developer = new Developer(payload);
   await developer
     .save()
     .then(() => {
       return res.status(200).json({ message: "New Developer Added" });
     })
-    .catch(() => {
+    .catch((err) => {
       return res
         .status(404)
-        .json({ message: "Error Occured while adding developer!!!" });
+        .json({ message: "Error Occured while adding developer!!!", error : err});
     });
 };
 
@@ -31,10 +38,9 @@ export const loginDeveloper = async (req,res)=>{
   try {
     let developer = await Developer.findOne({username : req.body.username});
     if(developer){
-      if(developer.password == req.body.password){
-        let token = createToken(developer);
-        req.header.token = token;
-        return res.status(200).json({message : "Login Successful", token });
+      if(compareInput(req.body.password,developer.password)){
+        let token = createToken({username : developer.username});
+        return res.status(200).json({message : "Login Successful As Developer", token });
       }
       return res.status(404).json({message : "Password is incorrect"});
     } else {
@@ -47,9 +53,6 @@ export const loginDeveloper = async (req,res)=>{
 
 // url : /dev/logout
 export const logoutDeveloper = async (req,res)=>{
-  if(req.header.token){
-    delete req.header.token;
-  }
   return res.status(200).json({message : "Logged out successfully"});
 }
 

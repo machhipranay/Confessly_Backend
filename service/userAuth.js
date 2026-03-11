@@ -7,7 +7,10 @@ export const createToken = (user)=>{
 
 export const userAuthMiddleware = async (req,res,next)=>{
     // take token from authorization header
-    let token = req.headers.Authorization.split(" ")[1];
+    if(!req.headers.authorization){
+        return res.status(404).json({message : "Authorization header not found"});
+    }
+    let token = req.headers.authorization.split(" ")[1];
 
     if(!token){
         return res.status(404).json({message : "Token not found"});

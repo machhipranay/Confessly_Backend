@@ -6,10 +6,14 @@ export const createToken = (dev)=>{
 }
 
 export const devAuthMiddleware = async (req,res,next)=>{
-    let token = req.header.token;
-    if(!token){
+    if( !req.headers.authorization ){
+        return res.status(404).json({message : "Authorization header not found"});
+    }
+    let token = req.headers.authorization.split(" ")[1];
+    if( !token ){
         return res.status(404).json({message : "Token not found"});
     }
+
     try {
         let {username} = jwt.verify(token,process.env.SECRET_KEY_DEVELOPER);
         req.username = username;

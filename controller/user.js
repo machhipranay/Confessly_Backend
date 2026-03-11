@@ -52,10 +52,9 @@ export const loginUser = async (req, res) => {
     await User.findOne({ username: req.body.username })
       .then((user) => {
         if (compareInput(req.body.password, user.password)) {
-          let token = createToken(user);
+          let token = createToken({ username : user.username });
           // save token in header authentication
           if (token) {
-            req.headers.Authorization = `Bearer ${token}`;
             return res.status(200).json({ message: "Login Successful", token : token});
           } else {
             return res.status(500).json({ message: "Internal Error" });
@@ -77,16 +76,14 @@ export const loginUser = async (req, res) => {
 export const findUser = async (req, res) => {
   let data = req.params.input;
   try {
+
+    // find all the user who has username or nickName similar to input
     const users = await User.find({
-      nickName: { $regex: data, $options: "i" },
-      username: { $ne: data },
-    });
-
-    const userViaUsername = await User.findOne({ username: data });
-
-    if (userViaUsername) {
-      users.splice(0, 0, userViaUsername);
-    }
+      $or: [
+        { username: { $regex: data, $options: "i" } },
+        { nickName: { $regex: data, $options: "i" } },
+      ],
+    }).select("-password");
 
     if (users.length) {
       res.status(200).json({ message: "Users found.", users });
@@ -100,7 +97,7 @@ export const findUser = async (req, res) => {
 
 export const getSelfProfile = async(req,res)=>{
   let username = req.username;
-  await User.findOne({ username })
+  await User.findOne({ username }).select("-password")
     .then((user) => {
       if(user){
         return res.status(200).json(user);
@@ -117,7 +114,7 @@ export const getSelfProfile = async(req,res)=>{
 export const getUser = async (req, res) => {
   let username = req.params.username;
 
-  await User.findOne({ username })
+  await User.findOne({ username }).select("-password")
     .then((user) => {
       if(user){
         return res.status(200).json(user);
@@ -203,10 +200,7 @@ export const unfollowUser = async (req, res) => {
 
 // url : /user/logout
 export const logoutUser = async (req, res) => {
-  if (req.header.token) {
-    delete req.headers.token;
-  }
-  return res.status(200).json({ message: "Logged out Successfully" });
+  return res.status(200).json({ message: "Logout Successful" });
 };
 
 // url : /user/group/:groupId/chat/:chatId/delete
@@ -260,14 +254,19 @@ export const editProfile = async(req,res)=>{
 export const banUser = async(req,res)=>{
   let username = req.params.username;
   try {
-    let user = await User.findOne({username});
+    let user = await User.findOne({username}).select("-password");
+
+    if(!user) {
+      return res.status(400).json({message : "User not found"});
+    }
+
     for(let groupId of user.groups){
       await userExitFromGroup(user.username,groupId);
     }
     await user.deleteOne();
     return res.status(200).json({message : "User banned"});
   } catch(error) {
-    return res.status(404).json({message : "Error!!", error});
+    return res.status(404).json({message : "Error !!", error});
   }
 }
 
