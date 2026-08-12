@@ -59,6 +59,7 @@ app.get('/dev/reports/:reportId/view',devAuthMiddleware,viewReport);
 // user routers ----------------------------------------------------
 app.post('/user/signup',upload.single('profilePhoto'), signupUser);
 app.post('/user/login', loginUser);
+app.get('/user/find', findUser);
 app.get('/user/:input/find', findUser);
 app.get('/user/profile',userAuthMiddleware ,getSelfProfile);
 app.get('/user/:username/profile',userAuthMiddleware,getUser);

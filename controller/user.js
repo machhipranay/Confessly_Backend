@@ -71,27 +71,56 @@ export const loginUser = async (req, res) => {
   }
 };
 
-// function which finds users from database ( Search ) ( Priority to username then nickName )
-// url : /user/:input/find
+// function which finds users from database ( Search ) ( Priority to username then nickName ) with pagination
+// url : /user/:input/find or /user/find?input=search_term&page=1&limit=10
 export const findUser = async (req, res) => {
-  let data = req.params.input;
-  try {
+  const data = req.params.input || req.query.input || req.query.search || req.query.q;
+  const page = parseInt(req.query.page, 10) || 1;
+  const limit = parseInt(req.query.limit, 10) || 10;
 
-    // find all the user who has username or nickName similar to input
-    const users = await User.find({
+  if (!data) {
+    return res.status(400).json({ message: "Search input parameter is required." });
+  }
+
+  const pageNum = Math.max(1, page);
+  const limitNum = Math.max(1, limit);
+  const skip = (pageNum - 1) * limitNum;
+
+  try {
+    const filter = {
       $or: [
         { username: { $regex: data, $options: "i" } },
         { nickName: { $regex: data, $options: "i" } },
       ],
-    }).select("-password");
+    };
+
+    const totalUsers = await User.countDocuments(filter);
+
+    // find users matching username or nickName with pagination
+    const users = await User.find(filter)
+      .select("-password")
+      .skip(skip)
+      .limit(limitNum);
 
     if (users.length) {
-      res.status(200).json({ message: "Users found.", users });
+      const totalPages = Math.ceil(totalUsers / limitNum);
+      return res.status(200).json({
+        message: "Users found.",
+        pagination: {
+          totalUsers,
+          currentPage: pageNum,
+          totalPages,
+          limit: limitNum,
+          hasNextPage: pageNum < totalPages,
+          hasPrevPage: pageNum > 1,
+        },
+        users,
+      });
     } else {
-      res.status(404).json({ message: "No result found." });
+      return res.status(404).json({ message: "No result found." });
     }
   } catch (err) {
-    return res.status(404).json({ message: "Error!!" });
+    return res.status(404).json({ message: "Error!!", error: err.message });
   }
 };
 
