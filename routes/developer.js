@@ -51,7 +51,7 @@ router.post('/login', loginDeveloper);
  *   - 404 Not Found    : { message: "Developer already exists" | validation error }
  * -----------------------------------------------------------------------------
  */
-router.post('/signup', signupDeveloper); // recently not used
+router.post('/signup', devAuthMiddleware, signupDeveloper); // recently not used
 
 /**
  * -----------------------------------------------------------------------------
