@@ -8,8 +8,29 @@ import { userExitFromGroup } from "./group.js";
 import { hashInput , compareInput } from "../utils/bcrypt.js";
 import { uploadOnCloudinary } from "../utils/cloudinary.js";
 
-// function which adds new User to database (sign Up)
-// url : /user/signup
+/**
+ * -----------------------------------------------------------------------------
+ * ROUTE       : User Signup
+ * URL         : /user/signup
+ * METHOD TYPE : POST
+ * AUTH        : Public (No token required)
+ * 
+ * DESCRIPTION : Registers a new user in the system. Validates payload via userValidation 
+ *               Joi schema, hashes password, and optionally uploads profile picture to Cloudinary.
+ * 
+ * DATA REQUIRED:
+ *   - Form-Data / Body:
+ *       - username (string) [Required]        : Lowercase letters only
+ *       - password (string) [Required]        : Min 6 chars, 1 uppercase, 1 number, 1 special char
+ *       - nickName (string) [Required]        : Display nickname
+ *       - isPrivateAccount (boolean) [Option] : Privacy flag
+ *       - profilePhoto (file) [Optional]      : Multipart form image file
+ * 
+ * RETURNS     :
+ *   - 200 OK           : { message: "New User Added" }
+ *   - 404 Not Found    : { message: "user already exists with same username" | "Error Occured while adding user!!!" | validation error }
+ * -----------------------------------------------------------------------------
+ */
 export const signupUser = async (req, res) => {
   let { error } = userValidation.validate(req.body);
   if (error) {
@@ -45,8 +66,27 @@ export const signupUser = async (req, res) => {
     });
 };
 
-// function to login with username & password 
-// url : /user/login
+/**
+ * -----------------------------------------------------------------------------
+ * ROUTE       : User Login
+ * URL         : /user/login
+ * METHOD TYPE : POST
+ * AUTH        : Public (No token required)
+ * 
+ * DESCRIPTION : Authenticates user credentials (username and password) and generates 
+ *               a JWT token for authorized endpoints.
+ * 
+ * DATA REQUIRED:
+ *   - Body (JSON):
+ *       - username (string) [Required] : Registered username
+ *       - password (string) [Required] : User password
+ * 
+ * RETURNS     :
+ *   - 200 OK           : { message: "Login Successful", token: "<jwt_token>" }
+ *   - 404 Not Found    : { message: "Username is Incorrect" | "password is incorrect" }
+ *   - 500 Internal Err : { message: "Internal Error" }
+ * -----------------------------------------------------------------------------
+ */
 export const loginUser = async (req, res) => {
   try {
     await User.findOne({ username: req.body.username })
@@ -71,8 +111,29 @@ export const loginUser = async (req, res) => {
   }
 };
 
-// function which finds users from database ( Search ) ( Priority to username then nickName ) with pagination
-// url : /user/:input/find or /user/find?input=search_term&page=1&limit=10
+/**
+ * -----------------------------------------------------------------------------
+ * ROUTE       : Search / Find Users (With Pagination)
+ * URL         : /user/find OR /user/:input/find
+ * METHOD TYPE : GET
+ * AUTH        : Public
+ * 
+ * DESCRIPTION : Searches users by username or nickname matching regex (case-insensitive) 
+ *               with pagination support.
+ * 
+ * DATA REQUIRED:
+ *   - Params       : :input (string) [Optional path parameter]
+ *   - Query Params : 
+ *       - input / search / q (string) : Search string (if not in path)
+ *       - page (number, default: 1)   : Page number
+ *       - limit (number, default: 10) : Number of items per page
+ * 
+ * RETURNS     :
+ *   - 200 OK           : { message: "Users found.", pagination: { totalUsers, currentPage, totalPages, limit, hasNextPage, hasPrevPage }, users: [ ... ] }
+ *   - 400 Bad Request  : { message: "Search input parameter is required." }
+ *   - 404 Not Found    : { message: "No result found." | "Error!!" }
+ * -----------------------------------------------------------------------------
+ */
 export const findUser = async (req, res) => {
   const data = req.params.input || req.query.input || req.query.search || req.query.q;
   const page = parseInt(req.query.page, 10) || 1;
@@ -124,6 +185,24 @@ export const findUser = async (req, res) => {
   }
 };
 
+/**
+ * -----------------------------------------------------------------------------
+ * ROUTE       : Get Authenticated User Profile
+ * URL         : /user/profile
+ * METHOD TYPE : GET
+ * AUTH        : Bearer Token Required (User Authentication)
+ * 
+ * DESCRIPTION : Retrieves profile object of currently logged in user (excluding password).
+ * 
+ * DATA REQUIRED:
+ *   - Headers : Authorization: Bearer <user_jwt_token>
+ * 
+ * RETURNS     :
+ *   - 200 OK          : User Object (without password field)
+ *   - 400 Bad Request : { message: "Not found." }
+ *   - 404 Not Found   : { message: "Error!!", error }
+ * -----------------------------------------------------------------------------
+ */
 export const getSelfProfile = async(req,res)=>{
   let username = req.username;
   await User.findOne({ username }).select("-password")
@@ -138,8 +217,25 @@ export const getSelfProfile = async(req,res)=>{
     });
 }
 
-// function which finds user by username and returns it ( Profile )
-// url : /user/:username/profile
+/**
+ * -----------------------------------------------------------------------------
+ * ROUTE       : Get Target User Profile By Username
+ * URL         : /user/:username/profile
+ * METHOD TYPE : GET
+ * AUTH        : Bearer Token Required (User Authentication)
+ * 
+ * DESCRIPTION : Retrieves public profile details of a target user by username.
+ * 
+ * DATA REQUIRED:
+ *   - Headers : Authorization: Bearer <user_jwt_token>
+ *   - Params  : :username (string) - Username of user to view
+ * 
+ * RETURNS     :
+ *   - 200 OK          : User Object (without password field)
+ *   - 400 Bad Request : { message: "User not found." }
+ *   - 404 Not Found   : { message: "Error!!", error }
+ * -----------------------------------------------------------------------------
+ */
 export const getUser = async (req, res) => {
   let username = req.params.username;
 
@@ -155,8 +251,26 @@ export const getUser = async (req, res) => {
     });
 };
 
-// follow user
-// url : /user/:username/follow
+/**
+ * -----------------------------------------------------------------------------
+ * ROUTE       : Follow A User
+ * URL         : /user/:username/follow
+ * METHOD TYPE : GET
+ * AUTH        : Bearer Token Required (User Authentication)
+ * 
+ * DESCRIPTION : Current user follows target user. Updates followings and followers lists. 
+ *               If target user is already following current user, adds to friends list.
+ * 
+ * DATA REQUIRED:
+ *   - Headers : Authorization: Bearer <user_jwt_token>
+ *   - Params  : :username (string) - Target username to follow
+ * 
+ * RETURNS     :
+ *   - 200 OK          : { message: "Followed Successfully" }
+ *   - 400 Bad Request : { message: "You can't unfollow yourself" | "User not found" }
+ *   - 404 Not Found   : { message: "Something went wrong" }
+ * -----------------------------------------------------------------------------
+ */
 export const followUser = async (req, res) => {
   // const currentUsername = req.user.username;
   const currentUsername = req.username;
@@ -190,8 +304,26 @@ export const followUser = async (req, res) => {
   }
 };
 
-// unfollow user
-// url : /user/:username/unfollow
+/**
+ * -----------------------------------------------------------------------------
+ * ROUTE       : Unfollow A User
+ * URL         : /user/:username/unfollow
+ * METHOD TYPE : GET
+ * AUTH        : Bearer Token Required (User Authentication)
+ * 
+ * DESCRIPTION : Current user unfollows target user. Removes target from followings/followers 
+ *               and friends lists if applicable.
+ * 
+ * DATA REQUIRED:
+ *   - Headers : Authorization: Bearer <user_jwt_token>
+ *   - Params  : :username (string) - Target username to unfollow
+ * 
+ * RETURNS     :
+ *   - 200 OK          : { message: "Unfollowed Successfully" }
+ *   - 400 Bad Request : { message: "You can't unfollow yourself" | "User not found" }
+ *   - 404 Not Found   : { message: "Something went wrong" }
+ * -----------------------------------------------------------------------------
+ */
 export const unfollowUser = async (req, res) => {
   const currentUsername = req.username;
   const targetUsername = req.params.username;
@@ -227,12 +359,47 @@ export const unfollowUser = async (req, res) => {
   }
 };
 
-// url : /user/logout
+/**
+ * -----------------------------------------------------------------------------
+ * ROUTE       : User Logout
+ * URL         : /user/logout
+ * METHOD TYPE : GET
+ * AUTH        : Bearer Token Required (User Authentication)
+ * 
+ * DESCRIPTION : Returns logout confirmation. Client removes local stored JWT token.
+ * 
+ * DATA REQUIRED:
+ *   - Headers : Authorization: Bearer <user_jwt_token>
+ * 
+ * RETURNS     :
+ *   - 200 OK  : { message: "Logout Successful" }
+ * -----------------------------------------------------------------------------
+ */
 export const logoutUser = async (req, res) => {
   return res.status(200).json({ message: "Logout Successful" });
 };
 
-// url : /user/group/:groupId/chat/:chatId/delete
+/**
+ * -----------------------------------------------------------------------------
+ * ROUTE       : Delete Chat Message By Sender
+ * URL         : /user/group/:groupId/chat/:chatId/delete
+ * METHOD TYPE : GET
+ * AUTH        : Bearer Token Required (User Authentication - Sender Only)
+ * 
+ * DESCRIPTION : Allows the message sender to redact/delete their own chat message.
+ * 
+ * DATA REQUIRED:
+ *   - Headers : Authorization: Bearer <user_jwt_token>
+ *   - Params  : 
+ *       - :groupId (string) : Group ObjectId
+ *       - :chatId (string)  : Chat ObjectId to delete
+ * 
+ * RETURNS     :
+ *   - 200 OK          : { message: { message: "deleted successfully" } }
+ *   - 400 Bad Request : { message: "Chat not found." | "You can't delete other's chat" }
+ *   - 404 Not Found   : { message: "Error !!", error }
+ * -----------------------------------------------------------------------------
+ */
 export const deleteChatBySender = async (req,res)=>{
   let username = req.username;
   let chatId = req.params.chatId;
@@ -249,7 +416,27 @@ export const deleteChatBySender = async (req,res)=>{
   }
 }
 
-// url : /user/group/:groupId/:targetUsername/remove
+/**
+ * -----------------------------------------------------------------------------
+ * ROUTE       : Remove User From Group (Group Admin Only)
+ * URL         : /user/group/:groupId/:targetUsername/remove
+ * METHOD TYPE : GET
+ * AUTH        : Bearer Token Required (User Authentication - Group Admin)
+ * 
+ * DESCRIPTION : Enables group admin to remove a target member from the group.
+ * 
+ * DATA REQUIRED:
+ *   - Headers : Authorization: Bearer <user_jwt_token>
+ *   - Params  : 
+ *       - :groupId (string)        : Group ObjectId
+ *       - :targetUsername (string) : Username of member to remove
+ * 
+ * RETURNS     :
+ *   - 200 OK          : { message: "removed from the group successfully..." }
+ *   - 400 Bad Request : { message: "Only admin is supposed to remove the members" }
+ *   - 404 Not Found   : { message: "Error!!", error }
+ * -----------------------------------------------------------------------------
+ */
 export const removeUserFromGroup = async(req,res)=>{
   let username = req.username;
   let groupId = req.params.groupId;
@@ -266,7 +453,25 @@ export const removeUserFromGroup = async(req,res)=>{
   }
 }
 
-// url : /user/:username/:profile/edit
+/**
+ * -----------------------------------------------------------------------------
+ * ROUTE       : Edit Profile (Legacy / Alternative)
+ * URL         : /user/:username/:profile/edit
+ * METHOD TYPE : GET / POST
+ * AUTH        : Bearer Token Required (User Authentication)
+ * 
+ * DESCRIPTION : Edits nickname of authenticated user matching username.
+ * 
+ * DATA REQUIRED:
+ *   - Headers : Authorization: Bearer <user_jwt_token>
+ *   - Params  : :username (string)
+ *   - Body    : { nickName (string) }
+ * 
+ * RETURNS     :
+ *   - 200 OK          : { message: "Nickname changed successfully" }
+ *   - 400 Bad Request : { message: "You can't change someone's profile" }
+ * -----------------------------------------------------------------------------
+ */
 export const editProfile = async(req,res)=>{
   if(req.params.username != req.username){
     return res.status(400).json({message : "You can't change someone's profile"});
@@ -279,7 +484,25 @@ export const editProfile = async(req,res)=>{
   return res.status(200).json({message : "Nickname changed successfully"});
 }
 
-// url : /dev/user/:username/ban
+/**
+ * -----------------------------------------------------------------------------
+ * ROUTE       : Ban User (Developer Only)
+ * URL         : /dev/user/:username/ban
+ * METHOD TYPE : GET
+ * AUTH        : Bearer Token Required (Developer Authorization)
+ * 
+ * DESCRIPTION : Removes user from all joined groups and permanently deletes user account.
+ * 
+ * DATA REQUIRED:
+ *   - Headers : Authorization: Bearer <dev_jwt_token>
+ *   - Params  : :username (string) - User to ban
+ * 
+ * RETURNS     :
+ *   - 200 OK          : { message: "User banned" }
+ *   - 400 Bad Request : { message: "User not found" }
+ *   - 404 Not Found   : { message: "Error !!", error }
+ * -----------------------------------------------------------------------------
+ */
 export const banUser = async(req,res)=>{
   let username = req.params.username;
   try {
@@ -299,7 +522,24 @@ export const banUser = async(req,res)=>{
   }
 }
 
-// url : /user/edit/:nickName
+/**
+ * -----------------------------------------------------------------------------
+ * ROUTE       : Change Nickname
+ * URL         : /user/edit/:nickName
+ * METHOD TYPE : GET
+ * AUTH        : Bearer Token Required (User Authentication)
+ * 
+ * DESCRIPTION : Updates nickname for the currently authenticated user.
+ * 
+ * DATA REQUIRED:
+ *   - Headers : Authorization: Bearer <user_jwt_token>
+ *   - Params  : :nickName (string) - New display nickname
+ * 
+ * RETURNS     :
+ *   - 200 OK        : { message: "NickName Changed Successfully" }
+ *   - 404 Not Found : { message: "Error !!", error }
+ * -----------------------------------------------------------------------------
+ */
 export const changeNickName = async(req,res)=>{
   let username = req.username;
   let nickName = req.params.nickName;

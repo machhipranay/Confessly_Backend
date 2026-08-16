@@ -3,7 +3,29 @@ import { Report } from "../models/Report.js";
 import { deleteChat } from "./chat.js";
 import { reportValidation} from "../validation/reportValidation.js"
 
-// url : /user/group/:groupId/chat/:chatId/report
+/**
+ * -----------------------------------------------------------------------------
+ * ROUTE       : Create / Submit Report For Chat Message
+ * URL         : /user/group/:groupId/chat/:chatId/report
+ * METHOD TYPE : POST
+ * AUTH        : Bearer Token Required (User Authentication)
+ * 
+ * DESCRIPTION : Submits a user report flagging a specific chat message for developer review.
+ * 
+ * DATA REQUIRED:
+ *   - Headers : Authorization: Bearer <user_jwt_token>
+ *   - Params  : 
+ *       - :groupId (string) : MongoDB ObjectId of group
+ *       - :chatId (string)  : MongoDB ObjectId of chat message
+ *   - Body (JSON):
+ *       - reason (string) [Required]      : One of ["spam", "harassment", "hate_speech", "nudity", "other"]
+ *       - description (string) [Optional] : Detailed explanation of report
+ * 
+ * RETURNS     :
+ *   - 200 OK        : { message: "Reported Successfully" }
+ *   - 404 Not Found : { message: "Error!!" | validation error }
+ * -----------------------------------------------------------------------------
+ */
 export const createReport = async (req, res) => {
   req.body.chatId = req.params.chatId;
   req.body.reporter = req.username;
@@ -22,7 +44,25 @@ export const createReport = async (req, res) => {
     });
 };
 
-// url : /dev/reports/:reportId/actionaken
+/**
+ * -----------------------------------------------------------------------------
+ * ROUTE       : Take Action On Report (Delete Reported Chat)
+ * URL         : /dev/reports/:reportId/actionTaken
+ * METHOD TYPE : GET
+ * AUTH        : Bearer Token Required (Developer Authorization)
+ * 
+ * DESCRIPTION : Resolves report by soft deleting/redacting the reported chat message 
+ *               and setting report status to 'action_taken'.
+ * 
+ * DATA REQUIRED:
+ *   - Headers : Authorization: Bearer <dev_jwt_token>
+ *   - Params  : :reportId (string) - MongoDB ObjectId of the report
+ * 
+ * RETURNS     :
+ *   - 200 OK          : { message: "deleted successfully" }
+ *   - 400 Bad Request : { message: "report doesnot exists" }
+ * -----------------------------------------------------------------------------
+ */
 export const actionReport = async (req, res) => {
   let reportId = req.params.reportId;
   try {
@@ -44,7 +84,24 @@ export const actionReport = async (req, res) => {
   }
 };
 
-// url : /dev/reports/:reportId/dismiss
+/**
+ * -----------------------------------------------------------------------------
+ * ROUTE       : Dismiss Report
+ * URL         : /dev/reports/:reportId/dismiss
+ * METHOD TYPE : GET
+ * AUTH        : Bearer Token Required (Developer Authorization)
+ * 
+ * DESCRIPTION : Dismisses a report by setting its status to 'dismissed' without deleting chat.
+ * 
+ * DATA REQUIRED:
+ *   - Headers : Authorization: Bearer <dev_jwt_token>
+ *   - Params  : :reportId (string) - MongoDB ObjectId of report
+ * 
+ * RETURNS     :
+ *   - 200 OK          : { message: "report dismissed" }
+ *   - 400 Bad Request : { message: "report doesnot exists" }
+ * -----------------------------------------------------------------------------
+ */
 export const dismissReport = async (req, res) => {
   let reportId = req.params.reportId;
   let devUsername = req.username;
@@ -59,7 +116,23 @@ export const dismissReport = async (req, res) => {
   }
 };
 
-// url : /dev/reports/pending
+/**
+ * -----------------------------------------------------------------------------
+ * ROUTE       : Get Pending Reports List
+ * URL         : /dev/reports/pending
+ * METHOD TYPE : GET
+ * AUTH        : Bearer Token Required (Developer Authorization)
+ * 
+ * DESCRIPTION : Fetches all reports with status 'pending' awaiting developer action.
+ * 
+ * DATA REQUIRED:
+ *   - Headers : Authorization: Bearer <dev_jwt_token>
+ * 
+ * RETURNS     :
+ *   - 200 OK        : { message: "Result found", reports: [ ... ] }
+ *   - 404 Not Found : { message: "No reports found" }
+ * -----------------------------------------------------------------------------
+ */
 export const getPendingReports = async(req,res)=>{
     try {
         let reports = await Report.find({ status : "pending" });
@@ -69,7 +142,23 @@ export const getPendingReports = async(req,res)=>{
     }
 }
 
-// url : /dev/reports/dismissed
+/**
+ * -----------------------------------------------------------------------------
+ * ROUTE       : Get Dismissed Reports List
+ * URL         : /dev/reports/dismissed
+ * METHOD TYPE : GET
+ * AUTH        : Bearer Token Required (Developer Authorization)
+ * 
+ * DESCRIPTION : Fetches all reports marked as 'dismissed'.
+ * 
+ * DATA REQUIRED:
+ *   - Headers : Authorization: Bearer <dev_jwt_token>
+ * 
+ * RETURNS     :
+ *   - 200 OK        : { message: "Result found", reports: [ ... ] }
+ *   - 404 Not Found : { message: "No reports found" }
+ * -----------------------------------------------------------------------------
+ */
 export const getDismissedReports = async(req,res)=>{
     try {
         let reports = await Report.find({ status : "dismissed" });
@@ -79,7 +168,23 @@ export const getDismissedReports = async(req,res)=>{
     }
 }
 
-// url : /dev/reports/actionTaken
+/**
+ * -----------------------------------------------------------------------------
+ * ROUTE       : Get Action-Taken Reports List
+ * URL         : /dev/reports/actionTaken
+ * METHOD TYPE : GET
+ * AUTH        : Bearer Token Required (Developer Authorization)
+ * 
+ * DESCRIPTION : Fetches all reports resolved with status 'action_taken'.
+ * 
+ * DATA REQUIRED:
+ *   - Headers : Authorization: Bearer <dev_jwt_token>
+ * 
+ * RETURNS     :
+ *   - 200 OK        : { message: "Result found", reports: [ ... ] }
+ *   - 404 Not Found : { message: "No reports found" }
+ * -----------------------------------------------------------------------------
+ */
 export const getActionTakenReports = async(req,res)=>{
     try {
         let reports = await Report.find({ status : "action_taken" });
@@ -89,7 +194,25 @@ export const getActionTakenReports = async(req,res)=>{
     }
 }
 
-// url : /dev/report/:reportId/view
+/**
+ * -----------------------------------------------------------------------------
+ * ROUTE       : View Detailed Report Info
+ * URL         : /dev/reports/:reportId/view
+ * METHOD TYPE : GET
+ * AUTH        : Bearer Token Required (Developer Authorization)
+ * 
+ * DESCRIPTION : Retrieves details of a specific report including reported user, 
+ *               reporter, message content, reason, description, and creation time.
+ * 
+ * DATA REQUIRED:
+ *   - Headers : Authorization: Bearer <dev_jwt_token>
+ *   - Params  : :reportId (string) - MongoDB ObjectId of report
+ * 
+ * RETURNS     :
+ *   - 200 OK        : { message: "Report Content...", responce: { _id, reportedUser, reporter, chatContent, reason, description, createdAt } }
+ *   - 404 Not Found : { message: "Error!!", error }
+ * -----------------------------------------------------------------------------
+ */
 export const viewReport = async(req,res)=>{
   let reportId = req.params.reportId;
   try {

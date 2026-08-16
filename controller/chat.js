@@ -2,8 +2,28 @@ import { Chat } from "../models/Chat.js";
 import { Group } from "../models/Group.js";
 import { chatValidation } from "../validation/chatValidation.js";
 
-// post request 
-// url : /user/group/:groupId/chat/new
+/**
+ * -----------------------------------------------------------------------------
+ * ROUTE       : Create / Send New Chat Message
+ * URL         : /user/group/:groupId/chat/new
+ * METHOD TYPE : POST
+ * AUTH        : Bearer Token Required (User Authentication)
+ * 
+ * DESCRIPTION : Sends a new message or anonymous confession inside a group chat. 
+ *               Validates message content with chatValidation schema before saving.
+ * 
+ * DATA REQUIRED:
+ *   - Headers : Authorization: Bearer <user_jwt_token>
+ *   - Params  : :groupId (string) - MongoDB ObjectId of group
+ *   - Body (JSON):
+ *       - content (string) [Required]        : Chat message body text
+ *       - isConfession (boolean) [Optional]  : If true, sender identity is kept secret (default: false)
+ * 
+ * RETURNS     :
+ *   - 200 OK        : { message: "New Chat Added" }
+ *   - 404 Not Found : { message: "Something went wrong." | validation error }
+ * -----------------------------------------------------------------------------
+ */
 export const createNewChat = async (req, res) => {
   let groupId = req.params.groupId;
   let { content, isConfession} = req.body;
@@ -28,11 +48,14 @@ export const createNewChat = async (req, res) => {
     });
 };
 
-// // url : /user/group/:groupId/chat/:chatId/edit
-// export const editChat = async (req,res)=>{
-  // }
-  
-export const deleteChat = async (chatId, byWhom = "") => { // seems problem in this function
+/**
+ * -----------------------------------------------------------------------------
+ * HELPER      : Internal Function - Redact / Soft Delete Chat Message
+ * DESCRIPTION : Redacts the chat content with a deletion notice indicating 
+ *               who requested deletion (e.g. sender username or "developer").
+ * -----------------------------------------------------------------------------
+ */
+export const deleteChat = async (chatId, byWhom = "") => {
   try {
     await Chat.updateOne(
       { _id: chatId },
@@ -46,9 +69,27 @@ export const deleteChat = async (chatId, byWhom = "") => { // seems problem in t
   } catch (err) {
     return {message : "Something went wrong..."};
   }
-}; // returns object of responce
+};
 
-// url : user/group/:groupId/chat
+/**
+ * -----------------------------------------------------------------------------
+ * ROUTE       : Get All Messages Of A Group
+ * URL         : /user/group/:groupId/chat
+ * METHOD TYPE : GET
+ * AUTH        : Bearer Token Required (User Authentication)
+ * 
+ * DESCRIPTION : Retrieves all chat messages associated with a given group ID.
+ * 
+ * DATA REQUIRED:
+ *   - Headers : Authorization: Bearer <user_jwt_token>
+ *   - Params  : :groupId (string) - MongoDB ObjectId of group
+ * 
+ * RETURNS     :
+ *   - 200 OK          : { message: "Chat found", chats: [ ... ] }
+ *   - 400 Bad Request : { message: "Group doesnot exists" }
+ *   - 404 Not Found   : { message: "Error!!", error }
+ * -----------------------------------------------------------------------------
+ */
 export const getChatsOfGroup = async (req, res) => {
   let groupId = req.params.groupId;
   try {
@@ -63,9 +104,14 @@ export const getChatsOfGroup = async (req, res) => {
   } catch (error) {
     return res.status(404).json({ message: "Error!!", error: error.message});
   }
-}; // return list of chats
+};
 
-// function which finds chat by Id
+/**
+ * -----------------------------------------------------------------------------
+ * HELPER      : Internal Function - Get Chat Document By ID
+ * DESCRIPTION : Finds and returns a chat object by its MongoDB ObjectId.
+ * -----------------------------------------------------------------------------
+ */
 export const getChatById = async(chatId)=>{
   let chat = await Chat.findOne({_id : chatId});
   return chat;

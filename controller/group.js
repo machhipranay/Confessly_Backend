@@ -2,7 +2,25 @@ import {Group} from '../models/Group.js';
 import {User} from '../models/User.js';
 import mongoose from 'mongoose';
 
-// url : /user/group/:name/create
+/**
+ * -----------------------------------------------------------------------------
+ * ROUTE       : Create New Group
+ * URL         : /user/group/:name/create
+ * METHOD TYPE : GET
+ * AUTH        : Bearer Token Required (User Authentication)
+ * 
+ * DESCRIPTION : Creates a new group with the specified name. The requesting user 
+ *               becomes the group admin and first member.
+ * 
+ * DATA REQUIRED:
+ *   - Headers : Authorization: Bearer <user_jwt_token>
+ *   - Params  : :name (string) - Name for the group
+ * 
+ * RETURNS     :
+ *   - 200 OK        : { message: "New Group created successfully" }
+ *   - 404 Not Found : { message: "Error!!", error: <error_message> }
+ * -----------------------------------------------------------------------------
+ */
 export const createGroup = async(req,res)=>{
   let admin = req.username;
   let name = req.params.name;
@@ -24,7 +42,7 @@ export const createGroup = async(req,res)=>{
     }
 }
 
-// creates 6 length invite code with 1 hour duration
+// Helper: Creates 6 length invite code valid for 1 hour duration
 const generateInviteCode = ()=>{
     const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     let code = '';
@@ -34,7 +52,26 @@ const generateInviteCode = ()=>{
     return code;
 }
 
-// url : /user/group/:groupId/inviteCode/generate
+/**
+ * -----------------------------------------------------------------------------
+ * ROUTE       : Generate Group Invite Code (Admin Only)
+ * URL         : /user/group/:groupId/inviteCode/generate
+ * METHOD TYPE : GET
+ * AUTH        : Bearer Token Required (User Authentication - Group Admin)
+ * 
+ * DESCRIPTION : Generates a random 6-character invitation code valid for 1 hour 
+ *               allowing users to join the group.
+ * 
+ * DATA REQUIRED:
+ *   - Headers : Authorization: Bearer <user_jwt_token>
+ *   - Params  : :groupId (string) - MongoDB ObjectId of the group
+ * 
+ * RETURNS     :
+ *   - 200 OK          : { inviteCode: "aB3x9Z" }
+ *   - 400 Bad Request : { message: "only admin is allowed to generate this code" }
+ *   - 404 Not Found   : { message: "Group not found" | "Error", error }
+ * -----------------------------------------------------------------------------
+ */
 export const getInviteCode = async (req,res)=>{
   try{
 
@@ -55,7 +92,25 @@ export const getInviteCode = async (req,res)=>{
   }
 };
 
-// url : /user/group/:inviteCode/join
+/**
+ * -----------------------------------------------------------------------------
+ * ROUTE       : Join Group Via Invite Code
+ * URL         : /user/group/:inviteCode/join
+ * METHOD TYPE : GET
+ * AUTH        : Bearer Token Required (User Authentication)
+ * 
+ * DESCRIPTION : Adds current user to group using an active, non-expired 6-character invite code.
+ * 
+ * DATA REQUIRED:
+ *   - Headers : Authorization: Bearer <user_jwt_token>
+ *   - Params  : :inviteCode (string) - 6-character invite code
+ * 
+ * RETURNS     :
+ *   - 200 OK          : { message: "Joined group successfully" }
+ *   - 400 Bad Request : { message: "Invite code expired" | "Already In Group" }
+ *   - 404 Not Found   : { message: "Invalid Invite code" | "Error!!", error }
+ * -----------------------------------------------------------------------------
+ */
 export const joinGroup = async (req, res) => {
   const inviteCode = req.params.inviteCode;
   const username = req.username;
@@ -83,7 +138,26 @@ export const joinGroup = async (req, res) => {
   }
 };
 
-// url : /user/search/group/:name
+/**
+ * -----------------------------------------------------------------------------
+ * ROUTE       : Search User's Joined Groups By Name
+ * URL         : /user/search/group/:name
+ * METHOD TYPE : GET
+ * AUTH        : Bearer Token Required (User Authentication)
+ * 
+ * DESCRIPTION : Searches through the authenticated user's joined groups matching 
+ *               the prefix name (case-insensitive).
+ * 
+ * DATA REQUIRED:
+ *   - Headers : Authorization: Bearer <user_jwt_token>
+ *   - Params  : :name (string) - Prefix name pattern to search
+ * 
+ * RETURNS     :
+ *   - 200 OK          : { message: "Groups found", groups: [ ... ] }
+ *   - 400 Bad Request : { message: "Groups not found", groups: [] }
+ *   - 404 Not Found   : { message: "Error !!", error }
+ * -----------------------------------------------------------------------------
+ */
 export const searchGroupsByName= async(req,res)=>{
   let name = req.params.name;
   let username = req.username;
@@ -104,6 +178,23 @@ export const searchGroupsByName= async(req,res)=>{
   }
 };
 
+/**
+ * -----------------------------------------------------------------------------
+ * ROUTE       : Get All Joined Groups For User
+ * URL         : /user/group
+ * METHOD TYPE : GET
+ * AUTH        : Bearer Token Required (User Authentication)
+ * 
+ * DESCRIPTION : Returns list of group objects for all groups joined by authenticated user.
+ * 
+ * DATA REQUIRED:
+ *   - Headers : Authorization: Bearer <user_jwt_token>
+ * 
+ * RETURNS     :
+ *   - 200 OK        : { message: "Found Groups", groups: [ ... ] }
+ *   - 404 Not Found : { message: "Error", error }
+ * -----------------------------------------------------------------------------
+ */
 export const getGroups = async(req,res)=>{
   let username = req.username;
   try{
@@ -118,7 +209,25 @@ export const getGroups = async(req,res)=>{
   }
 }
 
-// url : /user/group/:groupId/exit
+/**
+ * -----------------------------------------------------------------------------
+ * ROUTE       : Exit Group
+ * URL         : /user/group/:groupId/exit
+ * METHOD TYPE : GET
+ * AUTH        : Bearer Token Required (User Authentication)
+ * 
+ * DESCRIPTION : Removes current user from the specified group. If admin exits and 
+ *               is sole member, group is deleted.
+ * 
+ * DATA REQUIRED:
+ *   - Headers : Authorization: Bearer <user_jwt_token>
+ *   - Params  : :groupId (string) - MongoDB ObjectId of group
+ * 
+ * RETURNS     :
+ *   - 200 OK        : { message: "removed from the group successfully..." }
+ *   - 404 Not Found : { message: "Error !!", error }
+ * -----------------------------------------------------------------------------
+ */
 export const exitGroup = async (req,res)=>{
   let username = req.username;
   let groupId = req.params.groupId;
@@ -131,7 +240,13 @@ export const exitGroup = async (req,res)=>{
   }
 };
 
-// function which removes user from group
+/**
+ * -----------------------------------------------------------------------------
+ * HELPER      : Internal Function - User Exit From Group
+ * DESCRIPTION : Helper function that removes a user from a group's members array 
+ *               and the group ID from the user's groups array. Handles admin exit logic.
+ * -----------------------------------------------------------------------------
+ */
 export const userExitFromGroup = async(username,groupId)=>{
     let user = await User.findOne({username});
     let idx = user.groups.findIndex(id => id.toString() == groupId);
