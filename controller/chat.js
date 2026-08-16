@@ -1,6 +1,7 @@
 import { Chat } from "../models/Chat.js";
 import { Group } from "../models/Group.js";
 import { chatValidation } from "../validation/chatValidation.js";
+import { ApiResponse } from "../utils/ApiResponse.js";
 
 /**
  * -----------------------------------------------------------------------------
@@ -20,8 +21,8 @@ import { chatValidation } from "../validation/chatValidation.js";
  *       - isConfession (boolean) [Optional]  : If true, sender identity is kept secret (default: false)
  * 
  * RETURNS     :
- *   - 200 OK        : { message: "New Chat Added" }
- *   - 404 Not Found : { message: "Something went wrong." | validation error }
+ *   - 200 OK        : { success: true, statusCode: 200, message: "New Chat Added", data: null, error: null }
+ *   - 400 Bad Req   : { success: false, statusCode: 400, message: "...", data: null, error: "..." }
  * -----------------------------------------------------------------------------
  */
 export const createNewChat = async (req, res) => {
@@ -32,19 +33,22 @@ export const createNewChat = async (req, res) => {
 
   let { error } = chatValidation.validate(newChat);
   if (error) {
-    return res.status(404).json({ message: error.details[0].message });
+    return ApiResponse.error(res, 400, error.details[0].message, error.details[0].message);
   }
   let group = await Group.findOne({_id: groupId});
+  if (!group) {
+    return ApiResponse.error(res, 404, "Group does not exist");
+  }
   
   let chat = new Chat(newChat);
   group.chats.push(chat._id);
   await group.save();
   await chat.save()
-  .then(() => {
-      return res.status(200).json({ message: "New Chat Added" });
+    .then(() => {
+      return ApiResponse.success(res, 200, "New Chat Added");
     })
     .catch((err) => {
-      return res.status(404).json({ message: "Something went wrong." });
+      return ApiResponse.error(res, 400, "Something went wrong.", err.message || err);
     });
 };
 
@@ -85,9 +89,8 @@ export const deleteChat = async (chatId, byWhom = "") => {
  *   - Params  : :groupId (string) - MongoDB ObjectId of group
  * 
  * RETURNS     :
- *   - 200 OK          : { message: "Chat found", chats: [ ... ] }
- *   - 400 Bad Request : { message: "Group doesnot exists" }
- *   - 404 Not Found   : { message: "Error!!", error }
+ *   - 200 OK          : { success: true, statusCode: 200, message: "Chat found", data: { chats: [...] }, error: null }
+ *   - 404 Not Found   : { success: false, statusCode: 404, message: "Group doesnot exists", data: null, error: "..." }
  * -----------------------------------------------------------------------------
  */
 export const getChatsOfGroup = async (req, res) => {
@@ -95,14 +98,14 @@ export const getChatsOfGroup = async (req, res) => {
   try {
     let group = await Group.findOne({ _id: groupId });
     if (!group) {
-      return res.status(400).json({ message: "Group doesnot exists" });
+      return ApiResponse.error(res, 404, "Group doesnot exists");
     }
     const chats = await Promise.all(
       group.chats.map((chatId) => getChatById(chatId))
     );
-    return res.status(200).json({ message: "Chat found", chats });
+    return ApiResponse.success(res, 200, "Chat found", { chats });
   } catch (error) {
-    return res.status(404).json({ message: "Error!!", error: error.message});
+    return ApiResponse.error(res, 400, "Error!!", error.message || error);
   }
 };
 

@@ -1,6 +1,7 @@
 import {Group} from '../models/Group.js';
 import {User} from '../models/User.js';
 import mongoose from 'mongoose';
+import { ApiResponse } from '../utils/ApiResponse.js';
 
 /**
  * -----------------------------------------------------------------------------
@@ -17,8 +18,8 @@ import mongoose from 'mongoose';
  *   - Params  : :name (string) - Name for the group
  * 
  * RETURNS     :
- *   - 200 OK        : { message: "New Group created successfully" }
- *   - 404 Not Found : { message: "Error!!", error: <error_message> }
+ *   - 200 OK        : { success: true, statusCode: 200, message: "New Group created successfully", data: null, error: null }
+ *   - 400 Bad Req   : { success: false, statusCode: 400, message: "Error!!", data: null, error: "..." }
  * -----------------------------------------------------------------------------
  */
 export const createGroup = async(req,res)=>{
@@ -31,14 +32,10 @@ export const createGroup = async(req,res)=>{
       let user = await User.findOne({username : admin});
       user.groups.push(group._id);
       await user.save();
-      await group.save().then(()=>{
-        return res.status(200).json({message : "New Group created successfully"});
-      })
-      .catch((error)=>{
-        return res.status(404).json({message : "Error!!", error: error.message});
-      });
+      await group.save();
+      return ApiResponse.success(res, 200, "New Group created successfully");
     } catch (error) {
-      res.status(404).json({message : "Error!!", error});
+      return ApiResponse.error(res, 400, "Error!!", error.message || error);
     }
 }
 
@@ -67,28 +64,28 @@ const generateInviteCode = ()=>{
  *   - Params  : :groupId (string) - MongoDB ObjectId of the group
  * 
  * RETURNS     :
- *   - 200 OK          : { inviteCode: "aB3x9Z" }
- *   - 400 Bad Request : { message: "only admin is allowed to generate this code" }
- *   - 404 Not Found   : { message: "Group not found" | "Error", error }
+ *   - 200 OK          : { success: true, statusCode: 200, message: "Invite code generated successfully", data: { inviteCode: "aB3x9Z" }, error: null }
+ *   - 403 Forbidden   : { success: false, statusCode: 403, message: "only admin is allowed to generate this code", data: null, error: "..." }
+ *   - 404 Not Found   : { success: false, statusCode: 404, message: "Group not found", data: null, error: "..." }
  * -----------------------------------------------------------------------------
  */
 export const getInviteCode = async (req,res)=>{
   try{
 
     const group = await Group.findById(req.params.groupId);
+    if (!group) return ApiResponse.error(res, 404, "Group not found");
     if(group.admin != req.username){
-      return res.status(400).json({message : "only admin is allowed to generate this code"});
+      return ApiResponse.error(res, 403, "only admin is allowed to generate this code");
     }
-    if (!group) return res.status(404).send("Group not found");
   
     const code = generateInviteCode();
     group.inviteCode = code;
     group.inviteExpiry = Date.now() + 1000 * 60 * 60; // 1 hour validity
   
     await group.save();
-    res.json({ inviteCode: code });
+    return ApiResponse.success(res, 200, "Invite code generated successfully", { inviteCode: code });
   } catch(error) {
-    return res.status(404).json({message : "Error", error: error.message});
+    return ApiResponse.error(res, 400, "Error", error.message || error);
   }
 };
 
@@ -106,9 +103,9 @@ export const getInviteCode = async (req,res)=>{
  *   - Params  : :inviteCode (string) - 6-character invite code
  * 
  * RETURNS     :
- *   - 200 OK          : { message: "Joined group successfully" }
- *   - 400 Bad Request : { message: "Invite code expired" | "Already In Group" }
- *   - 404 Not Found   : { message: "Invalid Invite code" | "Error!!", error }
+ *   - 200 OK          : { success: true, statusCode: 200, message: "Joined group successfully", data: null, error: null }
+ *   - 400 Bad Request : { success: false, statusCode: 400, message: "Invite code expired" | "Already In Group", data: null, error: "..." }
+ *   - 404 Not Found   : { success: false, statusCode: 404, message: "Invalid Invite code", data: null, error: "..." }
  * -----------------------------------------------------------------------------
  */
 export const joinGroup = async (req, res) => {
@@ -118,10 +115,10 @@ export const joinGroup = async (req, res) => {
   try {
     const group = await Group.findOne({ inviteCode });
 
-    if (!group) return res.status(404).json({ message: "Invalid Invite code" });
+    if (!group) return ApiResponse.error(res, 404, "Invalid Invite code");
     
     if (group.inviteExpiry && Date.now() > group.inviteExpiry)
-      return res.status(400).send("Invite code expired");
+      return ApiResponse.error(res, 400, "Invite code expired");
 
     if (!group.members.includes(username)) {
       group.members.push(username);
@@ -129,12 +126,12 @@ export const joinGroup = async (req, res) => {
       user.groups.push(group._id);
       await user.save();
       await group.save();
-      return res.status(200).json({ message: "Joined group successfully" });
+      return ApiResponse.success(res, 200, "Joined group successfully");
     } else {
-      return res.status(400).json({ message: "Already In Group" });
+      return ApiResponse.error(res, 400, "Already In Group");
     }
   } catch (err) {
-    return res.status(404).json({ message: "Error!!", error: err.message });
+    return ApiResponse.error(res, 400, "Error!!", err.message || err);
   }
 };
 
@@ -153,9 +150,8 @@ export const joinGroup = async (req, res) => {
  *   - Params  : :name (string) - Prefix name pattern to search
  * 
  * RETURNS     :
- *   - 200 OK          : { message: "Groups found", groups: [ ... ] }
- *   - 400 Bad Request : { message: "Groups not found", groups: [] }
- *   - 404 Not Found   : { message: "Error !!", error }
+ *   - 200 OK          : { success: true, statusCode: 200, message: "Groups found", data: { groups: [...] }, error: null }
+ *   - 404 Not Found   : { success: false, statusCode: 404, message: "Groups not found", data: null, error: "..." }
  * -----------------------------------------------------------------------------
  */
 export const searchGroupsByName= async(req,res)=>{
@@ -164,7 +160,7 @@ export const searchGroupsByName= async(req,res)=>{
   try {
     const user = await User.findOne({username});
     if (!user || user.groups.length === 0) {
-      return res.status(400).json({ message : "Groups not found" , groups : []});
+      return ApiResponse.error(res, 404, "Groups not found");
     }
 
     const groups = await Group.find({
@@ -172,9 +168,9 @@ export const searchGroupsByName= async(req,res)=>{
       name: { $regex: `^${name}`, $options: "i" }, 
     });
 
-    return res.status(200).json({message : "Groups found", groups});
+    return ApiResponse.success(res, 200, "Groups found", { groups });
   } catch (error) {
-    return res.status(404).json({message : "Error !!", error :error.message});
+    return ApiResponse.error(res, 400, "Error !!", error.message || error);
   }
 };
 
@@ -191,8 +187,8 @@ export const searchGroupsByName= async(req,res)=>{
  *   - Headers : Authorization: Bearer <user_jwt_token>
  * 
  * RETURNS     :
- *   - 200 OK        : { message: "Found Groups", groups: [ ... ] }
- *   - 404 Not Found : { message: "Error", error }
+ *   - 200 OK        : { success: true, statusCode: 200, message: "Found Groups", data: { groups: [...] }, error: null }
+ *   - 400 Bad Req   : { success: false, statusCode: 400, message: "Error", data: null, error: "..." }
  * -----------------------------------------------------------------------------
  */
 export const getGroups = async(req,res)=>{
@@ -203,9 +199,9 @@ export const getGroups = async(req,res)=>{
     groups = await Promise.all(
       groups.map(id => Group.findOne({_id : id}))
     );
-    return res.status(200).json({message : "Found Groups", groups});
+    return ApiResponse.success(res, 200, "Found Groups", { groups });
   } catch(error) {
-    return res.status(404).json({message : "Error", error : error.message});
+    return ApiResponse.error(res, 400, "Error", error.message || error);
   }
 }
 
@@ -224,8 +220,8 @@ export const getGroups = async(req,res)=>{
  *   - Params  : :groupId (string) - MongoDB ObjectId of group
  * 
  * RETURNS     :
- *   - 200 OK        : { message: "removed from the group successfully..." }
- *   - 404 Not Found : { message: "Error !!", error }
+ *   - 200 OK        : { success: true, statusCode: 200, message: "removed from the group successfully...", data: null, error: null }
+ *   - 400 Bad Req   : { success: false, statusCode: 400, message: "Error !!", data: null, error: "..." }
  * -----------------------------------------------------------------------------
  */
 export const exitGroup = async (req,res)=>{
@@ -234,9 +230,9 @@ export const exitGroup = async (req,res)=>{
   
   try {
     let message = await userExitFromGroup(username,groupId);
-    return res.status(200).json({message : message});
+    return ApiResponse.success(res, 200, message);
   } catch (error) {
-    return res.status(404).json({message : "Error !!", error: error.message});
+    return ApiResponse.error(res, 400, "Error !!", error.message || error);
   }
 };
 

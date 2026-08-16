@@ -2,6 +2,7 @@ import { Chat } from "../models/Chat.js";
 import { Report } from "../models/Report.js";
 import { deleteChat } from "./chat.js";
 import { reportValidation} from "../validation/reportValidation.js"
+import { ApiResponse } from "../utils/ApiResponse.js";
 
 /**
  * -----------------------------------------------------------------------------
@@ -22,8 +23,8 @@ import { reportValidation} from "../validation/reportValidation.js"
  *       - description (string) [Optional] : Detailed explanation of report
  * 
  * RETURNS     :
- *   - 200 OK        : { message: "Reported Successfully" }
- *   - 404 Not Found : { message: "Error!!" | validation error }
+ *   - 200 OK        : { success: true, statusCode: 200, message: "Reported Successfully", data: null, error: null }
+ *   - 400 Bad Req   : { success: false, statusCode: 400, message: "...", data: null, error: "..." }
  * -----------------------------------------------------------------------------
  */
 export const createReport = async (req, res) => {
@@ -31,16 +32,16 @@ export const createReport = async (req, res) => {
   req.body.reporter = req.username;
   let { error } = await reportValidation.validate(req.body);
   if (error) {
-    res.status(404).json({ message: error.details[0].message });
+    return ApiResponse.error(res, 400, error.details[0].message, error.details[0].message);
   }
-  let report = new Report(req.body); // make it manually;
+  let report = new Report(req.body);
   await report
     .save()
     .then(() => {
-      res.status(200).json({ message: "Reported Successfully" });
+      return ApiResponse.success(res, 200, "Reported Successfully");
     })
-    .catch(() => {
-      res.status(404).json({ message: "Error!!" });
+    .catch((err) => {
+      return ApiResponse.error(res, 400, "Error!!", err.message || err);
     });
 };
 
@@ -59,28 +60,31 @@ export const createReport = async (req, res) => {
  *   - Params  : :reportId (string) - MongoDB ObjectId of the report
  * 
  * RETURNS     :
- *   - 200 OK          : { message: "deleted successfully" }
- *   - 400 Bad Request : { message: "report doesnot exists" }
+ *   - 200 OK          : { success: true, statusCode: 200, message: "deleted successfully", data: null, error: null }
+ *   - 404 Not Found   : { success: false, statusCode: 404, message: "report doesnot exists", data: null, error: "..." }
  * -----------------------------------------------------------------------------
  */
 export const actionReport = async (req, res) => {
   let reportId = req.params.reportId;
   try {
     let report = await Report.findOne({ _id: reportId });
+    if (!report) {
+      return ApiResponse.error(res, 404, "report doesnot exists");
+    }
     let chatId = report.chatId;
     let devUsername = req.username;
 
-    let responce = await deleteChat(chatId, "developer");
+    let result = await deleteChat(chatId, "developer");
 
     await Report.updateMany(
       { chatId: chatId },
       { $set: { status: "action_taken", reviewedBy: devUsername } }
     );
 
-    return res.status(200).json(responce);
+    return ApiResponse.success(res, 200, result.message || "Action taken successfully");
 
   } catch (err) {
-    res.status(400).json({ message: "report doesnot exists" });
+    return ApiResponse.error(res, 404, "report doesnot exists", err.message || err);
   }
 };
 
@@ -98,21 +102,24 @@ export const actionReport = async (req, res) => {
  *   - Params  : :reportId (string) - MongoDB ObjectId of report
  * 
  * RETURNS     :
- *   - 200 OK          : { message: "report dismissed" }
- *   - 400 Bad Request : { message: "report doesnot exists" }
+ *   - 200 OK          : { success: true, statusCode: 200, message: "report dismissed", data: null, error: null }
+ *   - 404 Not Found   : { success: false, statusCode: 404, message: "report doesnot exists", data: null, error: "..." }
  * -----------------------------------------------------------------------------
  */
 export const dismissReport = async (req, res) => {
   let reportId = req.params.reportId;
   let devUsername = req.username;
   try {
-    await Report.updateOne(
+    const result = await Report.updateOne(
       { _id: reportId },
       { $set: { status: "dismissed", reviewedBy : devUsername } }
     );
-    res.status(200).json({message : "report dismissed"});
+    if (result.matchedCount === 0) {
+      return ApiResponse.error(res, 404, "report doesnot exists");
+    }
+    return ApiResponse.success(res, 200, "report dismissed");
   } catch (err) {
-    res.status(400).json({ message: "report doesnot exists" });
+    return ApiResponse.error(res, 404, "report doesnot exists", err.message || err);
   }
 };
 
@@ -129,16 +136,16 @@ export const dismissReport = async (req, res) => {
  *   - Headers : Authorization: Bearer <dev_jwt_token>
  * 
  * RETURNS     :
- *   - 200 OK        : { message: "Result found", reports: [ ... ] }
- *   - 404 Not Found : { message: "No reports found" }
+ *   - 200 OK        : { success: true, statusCode: 200, message: "Result found", data: { reports: [...] }, error: null }
+ *   - 404 Not Found : { success: false, statusCode: 404, message: "No reports found", data: null, error: "..." }
  * -----------------------------------------------------------------------------
  */
 export const getPendingReports = async(req,res)=>{
     try {
         let reports = await Report.find({ status : "pending" });
-        return res.status(200).json({message : "Result found", reports});
+        return ApiResponse.success(res, 200, "Result found", { reports });
     } catch (err) {
-        return res.status(404).json({message : "No reports found"});
+        return ApiResponse.error(res, 404, "No reports found", err.message || err);
     }
 }
 
@@ -155,16 +162,16 @@ export const getPendingReports = async(req,res)=>{
  *   - Headers : Authorization: Bearer <dev_jwt_token>
  * 
  * RETURNS     :
- *   - 200 OK        : { message: "Result found", reports: [ ... ] }
- *   - 404 Not Found : { message: "No reports found" }
+ *   - 200 OK        : { success: true, statusCode: 200, message: "Result found", data: { reports: [...] }, error: null }
+ *   - 404 Not Found : { success: false, statusCode: 404, message: "No reports found", data: null, error: "..." }
  * -----------------------------------------------------------------------------
  */
 export const getDismissedReports = async(req,res)=>{
     try {
         let reports = await Report.find({ status : "dismissed" });
-        return res.status(200).json({message : "Result found", reports});
+        return ApiResponse.success(res, 200, "Result found", { reports });
     } catch (err) {
-        return res.status(404).json({message : "No reports found"});
+        return ApiResponse.error(res, 404, "No reports found", err.message || err);
     }
 }
 
@@ -181,16 +188,16 @@ export const getDismissedReports = async(req,res)=>{
  *   - Headers : Authorization: Bearer <dev_jwt_token>
  * 
  * RETURNS     :
- *   - 200 OK        : { message: "Result found", reports: [ ... ] }
- *   - 404 Not Found : { message: "No reports found" }
+ *   - 200 OK        : { success: true, statusCode: 200, message: "Result found", data: { reports: [...] }, error: null }
+ *   - 404 Not Found : { success: false, statusCode: 404, message: "No reports found", data: null, error: "..." }
  * -----------------------------------------------------------------------------
  */
 export const getActionTakenReports = async(req,res)=>{
     try {
         let reports = await Report.find({ status : "action_taken" });
-        return res.status(200).json({message : "Result found", reports});
+        return ApiResponse.success(res, 200, "Result found", { reports });
     } catch (err) {
-        return res.status(404).json({message : "No reports found"});
+        return ApiResponse.error(res, 404, "No reports found", err.message || err);
     }
 }
 
@@ -209,26 +216,29 @@ export const getActionTakenReports = async(req,res)=>{
  *   - Params  : :reportId (string) - MongoDB ObjectId of report
  * 
  * RETURNS     :
- *   - 200 OK        : { message: "Report Content...", responce: { _id, reportedUser, reporter, chatContent, reason, description, createdAt } }
- *   - 404 Not Found : { message: "Error!!", error }
+ *   - 200 OK        : { success: true, statusCode: 200, message: "Report Content...", data: { responce }, error: null }
+ *   - 404 Not Found : { success: false, statusCode: 404, message: "Error!!", data: null, error: "..." }
  * -----------------------------------------------------------------------------
  */
 export const viewReport = async(req,res)=>{
   let reportId = req.params.reportId;
   try {
     let report = await Report.findOne({ _id : reportId });
+    if (!report) {
+      return ApiResponse.error(res, 404, "Report not found");
+    }
     let chat = await Chat.findOne({ _id :report.chatId });
     let responce = {
       _id : reportId,
-      reportedUser : chat.from,
+      reportedUser : chat ? chat.from : "Unknown",
       reporter : report.reporter,
-      chatContent : chat.content,
+      chatContent : chat ? chat.content : "Chat deleted or unavailable",
       reason : report.reason,
       description : report.description,
       createdAt : report.createdAt
     }
-    return res.status(200).json({message : "Report Content...", responce});
+    return ApiResponse.success(res, 200, "Report Content...", responce);
   } catch(error) {
-    return res.status(404).json({message : "Error!!", error : error.message} );
+    return ApiResponse.error(res, 404, "Error!!", error.message);
   }
 }

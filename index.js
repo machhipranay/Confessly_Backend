@@ -5,6 +5,7 @@ import path from 'path';
 import mongoose from 'mongoose';
 import { fileURLToPath } from 'url';
 import cloudinary from 'cloudinary';
+import { ApiResponse } from './utils/ApiResponse.js';
 
 // Import routers from routes directory
 import devRouter from './routes/developer.js';
@@ -55,7 +56,7 @@ app.use('/', reportRouter);
 // =============================================================================
 
 app.get('/health', (req,res)=>{
-  return res.status(200).json({ message: "Server is running perfectly" });
+  return ApiResponse.success(res, 200, "Server is running perfectly");
 });
 
 // =============================================================================
@@ -63,11 +64,11 @@ app.get('/health', (req,res)=>{
 // =============================================================================
 
 app.get('/{*any}', (req, res) => {
-  res.status(200).json({ message: "This is global get page" });
+  return ApiResponse.success(res, 200, "This is global get page");
 });
 
 app.post('/{*any}', (req, res) => {
-  res.status(200).json({ message: "This is global post page" });
+  return ApiResponse.success(res, 200, "This is global post page");
 });
 
 export default app;

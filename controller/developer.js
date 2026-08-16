@@ -1,5 +1,6 @@
 import { Developer } from "../models/Developer.js";
 import { createToken } from "../service/devAuth.js";
+import { ApiResponse } from "../utils/ApiResponse.js";
 import { compareInput, hashInput } from "../utils/bcrypt.js";
 import { devValidation } from "../validation/devValidation.js";
 
@@ -19,8 +20,8 @@ import { devValidation } from "../validation/devValidation.js";
  *       - password (string) [Required] : Min 6 characters, at least 1 uppercase letter, 1 number, and 1 special character
  * 
  * RETURNS     :
- *   - 200 OK           : { message: "New Developer Added" }
- *   - 404 Not Found    : { message: "Developer already exists" | "Error Occured while adding developer!!!" | validation error }
+ *   - 200 OK           : { success: true, statusCode: 200, message: "New Developer Added", data: null, error: null }
+ *   - 400 Bad Request  : { success: false, statusCode: 400, message: "...", data: null, error: "..." }
  * -----------------------------------------------------------------------------
  */
 export const signupDeveloper = async (req, res) => {
@@ -30,12 +31,12 @@ export const signupDeveloper = async (req, res) => {
   }
   let { error } = devValidation.validate(payload);
   if (error) {
-    return res.status(404).json({ message: error.details[0].message });
+    return ApiResponse.error(res, 400, error.details[0].message, error.details[0].message);
   }
 
   let developer = await Developer.findOne({username : req.body.username}).select("-password");
   if (developer) {
-    return res.status(404).json({ message: "Developer already exists" });
+    return ApiResponse.error(res, 400, "Developer already exists");
   }
 
   payload.password = await hashInput(req.body.password);
@@ -44,12 +45,10 @@ export const signupDeveloper = async (req, res) => {
   await developer
     .save()
     .then(() => {
-      return res.status(200).json({ message: "New Developer Added" });
+      return ApiResponse.success(res, 200, "New Developer Added");
     })
     .catch((err) => {
-      return res
-        .status(404)
-        .json({ message: "Error Occured while adding developer!!!", error : err});
+      return ApiResponse.error(res, 400, "Error Occured while adding developer!!!", err.message || err);
     });
 };
 
@@ -69,8 +68,8 @@ export const signupDeveloper = async (req, res) => {
  *       - password (string) [Required] : Developer password
  * 
  * RETURNS     :
- *   - 200 OK           : { message: "Login Successful As Developer", token: "<jwt_token>" }
- *   - 404 Not Found    : { message: "Username is incorrect" | "Password is incorrect" | "Some error occured!!!" }
+ *   - 200 OK           : { success: true, statusCode: 200, message: "Login Successful As Developer", data: { token }, error: null }
+ *   - 400 Bad Request  : { success: false, statusCode: 400, message: "...", data: null, error: "..." }
  * -----------------------------------------------------------------------------
  */
 export const loginDeveloper = async (req,res)=>{
@@ -79,14 +78,14 @@ export const loginDeveloper = async (req,res)=>{
     if(developer){
       if(compareInput(req.body.password,developer.password)){
         let token = createToken({username : developer.username});
-        return res.status(200).json({message : "Login Successful As Developer", token });
+        return ApiResponse.success(res, 200, "Login Successful As Developer", { token });
       }
-      return res.status(404).json({message : "Password is incorrect"});
+      return ApiResponse.error(res, 400, "Password is incorrect");
     } else {
-      return res.status(404).json({ message: "Username is incorrect"});
+      return ApiResponse.error(res, 400, "Username is incorrect");
     }
   } catch(err){
-    return res.status(404).json({ message: "Some error occured!!!" , error : err.message});
+    return ApiResponse.error(res, 400, "Some error occured!!!", err.message);
   }
 }
 
@@ -103,19 +102,19 @@ export const loginDeveloper = async (req,res)=>{
  *   - None
  * 
  * RETURNS     :
- *   - 200 OK           : { message: "Logged out successfully" }
+ *   - 200 OK           : { success: true, statusCode: 200, message: "Logged out successfully", data: null, error: null }
  * -----------------------------------------------------------------------------
  */
 export const logoutDeveloper = async (req,res)=>{
-  return res.status(200).json({message : "Logged out successfully"});
+  return ApiResponse.success(res, 200, "Logged out successfully");
 }
 
 /**
  * -----------------------------------------------------------------------------
  * HELPER / INTERNAL : Remove Developer Account
- * URL               : /dev/:username/remove (Internal helper)
- * METHOD TYPE       : DELETE / GET
- * AUTH              : Public / Dev Auth
+ * URL               : /dev/:username/remove
+ * METHOD TYPE       : DELETE
+ * AUTH              : Dev Auth
  * 
  * DESCRIPTION       : Deletes a developer account from database by username.
  * 
@@ -123,8 +122,8 @@ export const logoutDeveloper = async (req,res)=>{
  *   - Params : :username (string)
  * 
  * RETURNS:
- *   - 200 OK  : { message: "developer removed" }
- *   - 404 Err : { message: "Error !!", error }
+ *   - 200 OK  : { success: true, statusCode: 200, message: "Developer removed successfully", data: null, error: null }
+ *   - 404 Err : { success: false, statusCode: 404, message: "Developer not found", data: null, error: "..." }
  * -----------------------------------------------------------------------------
  */
 export const removeDeveloper = async (req, res) => {
@@ -135,20 +134,13 @@ export const removeDeveloper = async (req, res) => {
 
     // Developer not found
     if (result.deletedCount === 0) {
-      return res.status(404).json({
-        message: "Developer not found"
-      });
+      return ApiResponse.error(res, 404, "Developer not found");
     }
 
     // Successfully deleted
-    return res.status(200).json({
-      message: "Developer removed successfully"
-    });
+    return ApiResponse.success(res, 200, "Developer removed successfully");
 
   } catch (error) {
-    return res.status(500).json({
-      message: "Error removing developer",
-      error: error.message
-    });
+    return ApiResponse.error(res, 500, "Error removing developer", error.message);
   }
 };

@@ -7,6 +7,7 @@ import { deleteChat } from "./chat.js";
 import { userExitFromGroup } from "./group.js";
 import { hashInput , compareInput } from "../utils/bcrypt.js";
 import { uploadOnCloudinary } from "../utils/cloudinary.js";
+import { ApiResponse } from "../utils/ApiResponse.js";
 
 /**
  * -----------------------------------------------------------------------------
@@ -27,18 +28,18 @@ import { uploadOnCloudinary } from "../utils/cloudinary.js";
  *       - profilePhoto (file) [Optional]      : Multipart form image file
  * 
  * RETURNS     :
- *   - 200 OK           : { message: "New User Added" }
- *   - 404 Not Found    : { message: "user already exists with same username" | "Error Occured while adding user!!!" | validation error }
+ *   - 200 OK           : { success: true, statusCode: 200, message: "New User Added", data: null, error: null }
+ *   - 400 Bad Request  : { success: false, statusCode: 400, message: "...", data: null, error: "..." }
  * -----------------------------------------------------------------------------
  */
 export const signupUser = async (req, res) => {
   let { error } = userValidation.validate(req.body);
   if (error) {
-    return res.status(404).json({ message: error.details[0].message });
+    return ApiResponse.error(res, 400, error.details[0].message, error.details[0].message);
   }
   let user = await User.findOne({ username: req.body.username });
   if (user) {
-    return res.status(404).json({ message: "user already exists with same username" });
+    return ApiResponse.error(res, 400, "user already exists with same username");
   }
 
   const payload = {
@@ -57,12 +58,10 @@ export const signupUser = async (req, res) => {
   await user
     .save()
     .then(() => {
-      return res.status(200).json({ message: "New User Added" });
+      return ApiResponse.success(res, 200, "New User Added");
     })
-    .catch(() => {
-      return res
-        .status(404)
-        .json({ message: "Error Occured while adding user!!!" });
+    .catch((err) => {
+      return ApiResponse.error(res, 400, "Error Occured while adding user!!!", err.message || err);
     });
 };
 
@@ -82,32 +81,28 @@ export const signupUser = async (req, res) => {
  *       - password (string) [Required] : User password
  * 
  * RETURNS     :
- *   - 200 OK           : { message: "Login Successful", token: "<jwt_token>" }
- *   - 404 Not Found    : { message: "Username is Incorrect" | "password is incorrect" }
- *   - 500 Internal Err : { message: "Internal Error" }
+ *   - 200 OK           : { success: true, statusCode: 200, message: "Login Successful", data: { token }, error: null }
+ *   - 400 Bad Request  : { success: false, statusCode: 400, message: "...", data: null, error: "..." }
  * -----------------------------------------------------------------------------
  */
 export const loginUser = async (req, res) => {
   try {
-    await User.findOne({ username: req.body.username })
-      .then((user) => {
-        if (compareInput(req.body.password, user.password)) {
-          let token = createToken({ username : user.username });
-          // save token in header authentication
-          if (token) {
-            return res.status(200).json({ message: "Login Successful", token : token});
-          } else {
-            return res.status(500).json({ message: "Internal Error" });
-          }
+    const user = await User.findOne({ username: req.body.username });
+    if (!user) {
+      return ApiResponse.error(res, 400, "Username is Incorrect");
+    }
 
-        }
-        return res.status(404).json({ message: "password is incorrect" });
-      })
-      .catch((err) => {
-        return res.status(404).json({ message: "Username is Incorrect", error : err });
-      });
+    if (compareInput(req.body.password, user.password)) {
+      let token = createToken({ username : user.username });
+      if (token) {
+        return ApiResponse.success(res, 200, "Login Successful", { token });
+      } else {
+        return ApiResponse.error(res, 500, "Internal Error");
+      }
+    }
+    return ApiResponse.error(res, 400, "password is incorrect");
   } catch (err) {
-    return res.status(404).json({ message: "some error occured!!!" , error : err});
+    return ApiResponse.error(res, 400, "some error occured!!!", err.message || err);
   }
 };
 
@@ -129,9 +124,9 @@ export const loginUser = async (req, res) => {
  *       - limit (number, default: 10) : Number of items per page
  * 
  * RETURNS     :
- *   - 200 OK           : { message: "Users found.", pagination: { totalUsers, currentPage, totalPages, limit, hasNextPage, hasPrevPage }, users: [ ... ] }
- *   - 400 Bad Request  : { message: "Search input parameter is required." }
- *   - 404 Not Found    : { message: "No result found." | "Error!!" }
+ *   - 200 OK           : { success: true, statusCode: 200, message: "Users found.", data: { pagination, users }, error: null }
+ *   - 400 Bad Request  : { success: false, statusCode: 400, message: "Search input parameter is required.", data: null, error: "..." }
+ *   - 404 Not Found    : { success: false, statusCode: 404, message: "No result found.", data: null, error: "..." }
  * -----------------------------------------------------------------------------
  */
 export const findUser = async (req, res) => {
@@ -140,7 +135,7 @@ export const findUser = async (req, res) => {
   const limit = parseInt(req.query.limit, 10) || 10;
 
   if (!data) {
-    return res.status(400).json({ message: "Search input parameter is required." });
+    return ApiResponse.error(res, 400, "Search input parameter is required.");
   }
 
   const pageNum = Math.max(1, page);
@@ -157,7 +152,6 @@ export const findUser = async (req, res) => {
 
     const totalUsers = await User.countDocuments(filter);
 
-    // find users matching username or nickName with pagination
     const users = await User.find(filter)
       .select("-password")
       .skip(skip)
@@ -165,8 +159,7 @@ export const findUser = async (req, res) => {
 
     if (users.length) {
       const totalPages = Math.ceil(totalUsers / limitNum);
-      return res.status(200).json({
-        message: "Users found.",
+      return ApiResponse.success(res, 200, "Users found.", {
         pagination: {
           totalUsers,
           currentPage: pageNum,
@@ -178,10 +171,10 @@ export const findUser = async (req, res) => {
         users,
       });
     } else {
-      return res.status(404).json({ message: "No result found." });
+      return ApiResponse.error(res, 404, "No result found.");
     }
   } catch (err) {
-    return res.status(404).json({ message: "Error!!", error: err.message });
+    return ApiResponse.error(res, 500, "Error!!", err.message);
   }
 };
 
@@ -198,9 +191,8 @@ export const findUser = async (req, res) => {
  *   - Headers : Authorization: Bearer <user_jwt_token>
  * 
  * RETURNS     :
- *   - 200 OK          : User Object (without password field)
- *   - 400 Bad Request : { message: "Not found." }
- *   - 404 Not Found   : { message: "Error!!", error }
+ *   - 200 OK          : { success: true, statusCode: 200, message: "Profile fetched successfully", data: user, error: null }
+ *   - 404 Not Found   : { success: false, statusCode: 404, message: "Not found.", data: null, error: "..." }
  * -----------------------------------------------------------------------------
  */
 export const getSelfProfile = async(req,res)=>{
@@ -208,12 +200,12 @@ export const getSelfProfile = async(req,res)=>{
   await User.findOne({ username }).select("-password")
     .then((user) => {
       if(user){
-        return res.status(200).json(user);
+        return ApiResponse.success(res, 200, "Profile fetched successfully", user);
       }
-      return res.status(400).json({message : "Not found."});
+      return ApiResponse.error(res, 404, "Not found.");
     })
     .catch((err) => {
-      return res.status(404).json({message : "Error!!",error : err});
+      return ApiResponse.error(res, 500, "Error!!", err.message || err);
     });
 }
 
@@ -231,9 +223,8 @@ export const getSelfProfile = async(req,res)=>{
  *   - Params  : :username (string) - Username of user to view
  * 
  * RETURNS     :
- *   - 200 OK          : User Object (without password field)
- *   - 400 Bad Request : { message: "User not found." }
- *   - 404 Not Found   : { message: "Error!!", error }
+ *   - 200 OK          : { success: true, statusCode: 200, message: "User profile fetched successfully", data: user, error: null }
+ *   - 404 Not Found   : { success: false, statusCode: 404, message: "User not found.", data: null, error: "..." }
  * -----------------------------------------------------------------------------
  */
 export const getUser = async (req, res) => {
@@ -242,12 +233,12 @@ export const getUser = async (req, res) => {
   await User.findOne({ username }).select("-password")
     .then((user) => {
       if(user){
-        return res.status(200).json(user);
+        return ApiResponse.success(res, 200, "User profile fetched successfully", user);
       }
-      return res.status(400).json({message : "User not found."});
+      return ApiResponse.error(res, 404, "User not found.");
     })
     .catch((err) => {
-      return res.status(404).json({message : "Error!!",error : err});
+      return ApiResponse.error(res, 500, "Error!!", err.message || err);
     });
 };
 
@@ -266,18 +257,16 @@ export const getUser = async (req, res) => {
  *   - Params  : :username (string) - Target username to follow
  * 
  * RETURNS     :
- *   - 200 OK          : { message: "Followed Successfully" }
- *   - 400 Bad Request : { message: "You can't unfollow yourself" | "User not found" }
- *   - 404 Not Found   : { message: "Something went wrong" }
+ *   - 200 OK          : { success: true, statusCode: 200, message: "Followed Successfully", data: null, error: null }
+ *   - 400 Bad Request : { success: false, statusCode: 400, message: "...", data: null, error: "..." }
  * -----------------------------------------------------------------------------
  */
 export const followUser = async (req, res) => {
-  // const currentUsername = req.user.username;
   const currentUsername = req.username;
   const targetUsername = req.params.username;
 
   if (currentUsername == targetUsername)
-    return res.status(400).json({ message: "You can't unfollow yourself" });
+    return ApiResponse.error(res, 400, "You can't unfollow yourself");
   try {
     const currUser = await User.findOne({ username: currentUsername });
     const targetUser = await User.findOne({ username: targetUsername });
@@ -296,11 +285,11 @@ export const followUser = async (req, res) => {
       await currUser.save();
       await targetUser.save();
     } else {
-      return res.status(400).json({ message: "User not found" });
+      return ApiResponse.error(res, 404, "User not found");
     }
-    return res.status(200).json({ message: "Followed Successfully" });
+    return ApiResponse.success(res, 200, "Followed Successfully");
   } catch (err) {
-    return res.status(404).json({ message: "Something went wrong" });
+    return ApiResponse.error(res, 500, "Something went wrong", err.message || err);
   }
 };
 
@@ -319,9 +308,8 @@ export const followUser = async (req, res) => {
  *   - Params  : :username (string) - Target username to unfollow
  * 
  * RETURNS     :
- *   - 200 OK          : { message: "Unfollowed Successfully" }
- *   - 400 Bad Request : { message: "You can't unfollow yourself" | "User not found" }
- *   - 404 Not Found   : { message: "Something went wrong" }
+ *   - 200 OK          : { success: true, statusCode: 200, message: "Unfollowed Successfully", data: null, error: null }
+ *   - 400 Bad Request : { success: false, statusCode: 400, message: "...", data: null, error: "..." }
  * -----------------------------------------------------------------------------
  */
 export const unfollowUser = async (req, res) => {
@@ -329,7 +317,7 @@ export const unfollowUser = async (req, res) => {
   const targetUsername = req.params.username;
 
   if (currentUsername == targetUsername)
-    return res.status(400).json({ message: "You can't unfollow yourself" });
+    return ApiResponse.error(res, 400, "You can't unfollow yourself");
 
   try {
     const currUser = await User.findOne({ username: currentUsername });
@@ -351,11 +339,11 @@ export const unfollowUser = async (req, res) => {
       await currUser.save();
       await targetUser.save();
     } else {
-      return res.status(400).json({ message: "User not found" });
+      return ApiResponse.error(res, 404, "User not found");
     }
-    return res.status(200).json({ message: "Unfollowed Successfully" });
+    return ApiResponse.success(res, 200, "Unfollowed Successfully");
   } catch (err) {
-    return res.status(404).json({ message: "Something went wrong" });
+    return ApiResponse.error(res, 500, "Something went wrong", err.message || err);
   }
 };
 
@@ -372,11 +360,11 @@ export const unfollowUser = async (req, res) => {
  *   - Headers : Authorization: Bearer <user_jwt_token>
  * 
  * RETURNS     :
- *   - 200 OK  : { message: "Logout Successful" }
+ *   - 200 OK  : { success: true, statusCode: 200, message: "Logout Successful", data: null, error: null }
  * -----------------------------------------------------------------------------
  */
 export const logoutUser = async (req, res) => {
-  return res.status(200).json({ message: "Logout Successful" });
+  return ApiResponse.success(res, 200, "Logout Successful");
 };
 
 /**
@@ -395,9 +383,8 @@ export const logoutUser = async (req, res) => {
  *       - :chatId (string)  : Chat ObjectId to delete
  * 
  * RETURNS     :
- *   - 200 OK          : { message: { message: "deleted successfully" } }
- *   - 400 Bad Request : { message: "Chat not found." | "You can't delete other's chat" }
- *   - 404 Not Found   : { message: "Error !!", error }
+ *   - 200 OK          : { success: true, statusCode: 200, message: "deleted successfully", data: null, error: null }
+ *   - 400 Bad Request : { success: false, statusCode: 400, message: "...", data: null, error: "..." }
  * -----------------------------------------------------------------------------
  */
 export const deleteChatBySender = async (req,res)=>{
@@ -405,14 +392,15 @@ export const deleteChatBySender = async (req,res)=>{
   let chatId = req.params.chatId;
   try {
     let chat = await Chat.findOne({_id : chatId});
-    if(!chat) return res.status(400).json({message : "Chat not found."});
+    if(!chat) return ApiResponse.error(res, 404, "Chat not found.");
     if(chat.from == username){
-      return res.status(200).json({message : await deleteChat(chat._id,username)});
+      let result = await deleteChat(chat._id, username);
+      return ApiResponse.success(res, 200, result.message || "deleted successfully");
     } else {
-      return res.status(400).json({message : "You can't delete other's chat"});
+      return ApiResponse.error(res, 403, "You can't delete other's chat");
     }
   } catch(error) {
-      return res.status(404).json({message : "Error !!", error})
+      return ApiResponse.error(res, 500, "Error !!", error.message || error);
   }
 }
 
@@ -432,9 +420,8 @@ export const deleteChatBySender = async (req,res)=>{
  *       - :targetUsername (string) : Username of member to remove
  * 
  * RETURNS     :
- *   - 200 OK          : { message: "removed from the group successfully..." }
- *   - 400 Bad Request : { message: "Only admin is supposed to remove the members" }
- *   - 404 Not Found   : { message: "Error!!", error }
+ *   - 200 OK          : { success: true, statusCode: 200, message: "removed from the group successfully...", data: null, error: null }
+ *   - 403 Forbidden   : { success: false, statusCode: 403, message: "Only admin is supposed to remove the members", data: null, error: "..." }
  * -----------------------------------------------------------------------------
  */
 export const removeUserFromGroup = async(req,res)=>{
@@ -444,12 +431,13 @@ export const removeUserFromGroup = async(req,res)=>{
   try {
     let group = await Group.findOne({_id : groupId});
     if(group.admin == username){
-      return res.status(200).json({message : await userExitFromGroup(targetUsername,groupId)});
+      let msg = await userExitFromGroup(targetUsername,groupId);
+      return ApiResponse.success(res, 200, msg);
     } else {
-      return res.status(400).json({message : "Only admin is supposed to remove the members"});
+      return ApiResponse.error(res, 403, "Only admin is supposed to remove the members");
     }
   } catch(error) {
-    return res.status(404).json({message : "Error!!", error});
+    return ApiResponse.error(res, 400, error.message || "Error!!", error.message || error);
   }
 }
 
@@ -468,20 +456,20 @@ export const removeUserFromGroup = async(req,res)=>{
  *   - Body    : { nickName (string) }
  * 
  * RETURNS     :
- *   - 200 OK          : { message: "Nickname changed successfully" }
- *   - 400 Bad Request : { message: "You can't change someone's profile" }
+ *   - 200 OK          : { success: true, statusCode: 200, message: "Nickname changed successfully", data: null, error: null }
+ *   - 403 Forbidden   : { success: false, statusCode: 403, message: "You can't change someone's profile", data: null, error: "..." }
  * -----------------------------------------------------------------------------
  */
 export const editProfile = async(req,res)=>{
   if(req.params.username != req.username){
-    return res.status(400).json({message : "You can't change someone's profile"});
+    return ApiResponse.error(res, 403, "You can't change someone's profile");
   }
   let nickName = req.body.nickName;
   await User.updateOne(
     {username : req.username},
     {$set : {nickName : nickName}}
   );
-  return res.status(200).json({message : "Nickname changed successfully"});
+  return ApiResponse.success(res, 200, "Nickname changed successfully");
 }
 
 /**
@@ -498,9 +486,8 @@ export const editProfile = async(req,res)=>{
  *   - Params  : :username (string) - User to ban
  * 
  * RETURNS     :
- *   - 200 OK          : { message: "User banned" }
- *   - 400 Bad Request : { message: "User not found" }
- *   - 404 Not Found   : { message: "Error !!", error }
+ *   - 200 OK          : { success: true, statusCode: 200, message: "User banned", data: null, error: null }
+ *   - 404 Not Found   : { success: false, statusCode: 404, message: "User not found", data: null, error: "..." }
  * -----------------------------------------------------------------------------
  */
 export const banUser = async(req,res)=>{
@@ -509,16 +496,16 @@ export const banUser = async(req,res)=>{
     let user = await User.findOne({username}).select("-password");
 
     if(!user) {
-      return res.status(400).json({message : "User not found"});
+      return ApiResponse.error(res, 404, "User not found");
     }
 
     for(let groupId of user.groups){
       await userExitFromGroup(user.username,groupId);
     }
     await user.deleteOne();
-    return res.status(200).json({message : "User banned"});
+    return ApiResponse.success(res, 200, "User banned");
   } catch(error) {
-    return res.status(404).json({message : "Error !!", error});
+    return ApiResponse.error(res, 500, "Error !!", error.message || error);
   }
 }
 
@@ -536,8 +523,8 @@ export const banUser = async(req,res)=>{
  *   - Params  : :nickName (string) - New display nickname
  * 
  * RETURNS     :
- *   - 200 OK        : { message: "NickName Changed Successfully" }
- *   - 404 Not Found : { message: "Error !!", error }
+ *   - 200 OK        : { success: true, statusCode: 200, message: "NickName Changed Successfully", data: null, error: null }
+ *   - 400 Bad Req   : { success: false, statusCode: 400, message: "Error !!", data: null, error: "..." }
  * -----------------------------------------------------------------------------
  */
 export const changeNickName = async(req,res)=>{
@@ -548,8 +535,8 @@ export const changeNickName = async(req,res)=>{
       {username},
       {$set : {nickName}}
     );
-    res.status(200).json({message : "NickName Changed Successfully"});
+    return ApiResponse.success(res, 200, "NickName Changed Successfully");
   } catch (error) {
-    res.status(404).json({message : "Error !!", error : error.message});
+    return ApiResponse.error(res, 400, "Error !!", error.message);
   }
 }
