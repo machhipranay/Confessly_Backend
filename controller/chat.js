@@ -1,9 +1,30 @@
 import { Chat } from "../models/Chat.js";
 import { Group } from "../models/Group.js";
 import { chatValidation } from "../validation/chatValidation.js";
+import { ApiResponse } from "../utils/ApiResponse.js";
 
-// post request 
-// url : /user/group/:groupId/chat/new
+/**
+ * -----------------------------------------------------------------------------
+ * ROUTE       : Create / Send New Chat Message
+ * URL         : /user/group/:groupId/chat/new
+ * METHOD TYPE : POST
+ * AUTH        : Bearer Token Required (User Authentication)
+ * 
+ * DESCRIPTION : Sends a new message or anonymous confession inside a group chat. 
+ *               Validates message content with chatValidation schema before saving.
+ * 
+ * DATA REQUIRED:
+ *   - Headers : Authorization: Bearer <user_jwt_token>
+ *   - Params  : :groupId (string) - MongoDB ObjectId of group
+ *   - Body (JSON):
+ *       - content (string) [Required]        : Chat message body text
+ *       - isConfession (boolean) [Optional]  : If true, sender identity is kept secret (default: false)
+ * 
+ * RETURNS     :
+ *   - 200 OK        : { success: true, statusCode: 200, message: "New Chat Added", data: null, error: null }
+ *   - 400 Bad Req   : { success: false, statusCode: 400, message: "...", data: null, error: "..." }
+ * -----------------------------------------------------------------------------
+ */
 export const createNewChat = async (req, res) => {
   let groupId = req.params.groupId;
   let { content, isConfession} = req.body;
@@ -12,27 +33,33 @@ export const createNewChat = async (req, res) => {
 
   let { error } = chatValidation.validate(newChat);
   if (error) {
-    return res.status(404).json({ message: error.details[0].message });
+    return ApiResponse.error(res, 400, error.details[0].message, error.details[0].message);
   }
   let group = await Group.findOne({_id: groupId});
+  if (!group) {
+    return ApiResponse.error(res, 404, "Group does not exist");
+  }
   
   let chat = new Chat(newChat);
   group.chats.push(chat._id);
   await group.save();
   await chat.save()
-  .then(() => {
-      return res.status(200).json({ message: "New Chat Added" });
+    .then(() => {
+      return ApiResponse.success(res, 200, "New Chat Added");
     })
     .catch((err) => {
-      return res.status(404).json({ message: "Something went wrong." });
+      return ApiResponse.error(res, 400, "Something went wrong.", err.message || err);
     });
 };
 
-// // url : /user/group/:groupId/chat/:chatId/edit
-// export const editChat = async (req,res)=>{
-  // }
-  
-export const deleteChat = async (chatId, byWhom = "") => { // seems problem in this function
+/**
+ * -----------------------------------------------------------------------------
+ * HELPER      : Internal Function - Redact / Soft Delete Chat Message
+ * DESCRIPTION : Redacts the chat content with a deletion notice indicating 
+ *               who requested deletion (e.g. sender username or "developer").
+ * -----------------------------------------------------------------------------
+ */
+export const deleteChat = async (chatId, byWhom = "") => {
   try {
     await Chat.updateOne(
       { _id: chatId },
@@ -46,26 +73,48 @@ export const deleteChat = async (chatId, byWhom = "") => { // seems problem in t
   } catch (err) {
     return {message : "Something went wrong..."};
   }
-}; // returns object of responce
+};
 
-// url : user/group/:groupId/chat
+/**
+ * -----------------------------------------------------------------------------
+ * ROUTE       : Get All Messages Of A Group
+ * URL         : /user/group/:groupId/chat
+ * METHOD TYPE : GET
+ * AUTH        : Bearer Token Required (User Authentication)
+ * 
+ * DESCRIPTION : Retrieves all chat messages associated with a given group ID.
+ * 
+ * DATA REQUIRED:
+ *   - Headers : Authorization: Bearer <user_jwt_token>
+ *   - Params  : :groupId (string) - MongoDB ObjectId of group
+ * 
+ * RETURNS     :
+ *   - 200 OK          : { success: true, statusCode: 200, message: "Chat found", data: { chats: [...] }, error: null }
+ *   - 404 Not Found   : { success: false, statusCode: 404, message: "Group doesnot exists", data: null, error: "..." }
+ * -----------------------------------------------------------------------------
+ */
 export const getChatsOfGroup = async (req, res) => {
   let groupId = req.params.groupId;
   try {
     let group = await Group.findOne({ _id: groupId });
     if (!group) {
-      return res.status(400).json({ message: "Group doesnot exists" });
+      return ApiResponse.error(res, 404, "Group doesnot exists");
     }
     const chats = await Promise.all(
       group.chats.map((chatId) => getChatById(chatId))
     );
-    return res.status(200).json({ message: "Chat found", chats });
+    return ApiResponse.success(res, 200, "Chat found", { chats });
   } catch (error) {
-    return res.status(404).json({ message: "Error!!", error: error.message});
+    return ApiResponse.error(res, 400, "Error!!", error.message || error);
   }
-}; // return list of chats
+};
 
-// function which finds chat by Id
+/**
+ * -----------------------------------------------------------------------------
+ * HELPER      : Internal Function - Get Chat Document By ID
+ * DESCRIPTION : Finds and returns a chat object by its MongoDB ObjectId.
+ * -----------------------------------------------------------------------------
+ */
 export const getChatById = async(chatId)=>{
   let chat = await Chat.findOne({_id : chatId});
   return chat;

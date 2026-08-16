@@ -1,4 +1,5 @@
 import jwt from "jsonwebtoken";
+import { ApiResponse } from "../utils/ApiResponse.js";
 
 export const createToken = (user)=>{
     const token = jwt.sign({username : user.username},process.env.SECRET_KEY_USER);
@@ -8,12 +9,12 @@ export const createToken = (user)=>{
 export const userAuthMiddleware = async (req,res,next)=>{
     // take token from authorization header
     if(!req.headers.authorization){
-        return res.status(404).json({message : "Authorization header not found"});
+        return ApiResponse.error(res, 401, "Authorization header not found");
     }
     let token = req.headers.authorization.split(" ")[1];
 
     if(!token){
-        return res.status(404).json({message : "Token not found"});
+        return ApiResponse.error(res, 401, "Token not found");
     }
     
     try {
@@ -21,6 +22,6 @@ export const userAuthMiddleware = async (req,res,next)=>{
         req.username = username;
         next();
     } catch(err) {
-        return res.status(404).json({message : "Invalid token"});
+        return ApiResponse.error(res, 401, "Invalid token", err.message);
     }
 }

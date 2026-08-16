@@ -1,19 +1,18 @@
 import express from 'express';
 import cors from 'cors';
-// import bodyParser from 'body-parser';
 import dotenv from 'dotenv';
 import path from 'path';
 import mongoose from 'mongoose';
 import { fileURLToPath } from 'url';
-import {signupUser, loginUser, findUser,followUser,unfollowUser, logoutUser, getUser, banUser, deleteChatBySender, removeUserFromGroup, editProfile, changeNickName, getSelfProfile} from './controller/user.js'
-import { userAuthMiddleware } from './service/userAuth.js';
-import { loginDeveloper, signupDeveloper, logoutDeveloper} from './controller/developer.js';
-import { devAuthMiddleware } from './service/devAuth.js';
-import { createGroup, exitGroup, getGroups, getInviteCode, joinGroup, searchGroupsByName } from './controller/group.js';
-import { actionReport, dismissReport, getActionTakenReports,getPendingReports, getDismissedReports, viewReport, createReport } from './controller/report.js';
-import { createNewChat, getChatsOfGroup } from './controller/chat.js';
-import { upload } from './utils/multer.js';
 import cloudinary from 'cloudinary';
+import { ApiResponse } from './utils/ApiResponse.js';
+
+// Import routers from routes directory
+import devRouter from './routes/developer.js';
+import userRouter from './routes/user.js';
+import groupRouter from './routes/group.js';
+import chatRouter from './routes/chat.js';
+import reportRouter from './routes/report.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -22,7 +21,6 @@ const app = express();
 dotenv.config();
 app.use(cors());
 app.use(express.json());
-// app.use(express.static(path.join(__dirname,'/public')));
 
 cloudinary.config({ 
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -42,53 +40,35 @@ mongoose.connect(process.env.MONGO_URL)
   console.log("Some error occured while connecting database");
 })
 
-// developer routes ----------------------------------------------------
-app.post('/dev/login', loginDeveloper);
-app.post('/dev/signup', signupDeveloper); // recently not used
-app.get('/dev/logout', logoutDeveloper);
-app.get('/dev/user/:username/ban',devAuthMiddleware,banUser);
+// =============================================================================
+// ROUTER MOUNTING
+// =============================================================================
 
-// reports handling
-app.get('/dev/reports/:reportId/actionTaken',devAuthMiddleware,actionReport);
-app.get('/dev/reports/:reportId/dismiss',devAuthMiddleware,dismissReport);
-app.get('/dev/reports/pending',devAuthMiddleware,getPendingReports);
-app.get('/dev/reports/actionTaken',devAuthMiddleware,getActionTakenReports);
-app.get('/dev/reports/dismissed',devAuthMiddleware,getDismissedReports);
-app.get('/dev/reports/:reportId/view',devAuthMiddleware,viewReport);
+app.use('/dev', devRouter);
+app.use('/user', userRouter);
+app.use('/user', groupRouter);
+app.use('/user', chatRouter);
+app.use('/', reportRouter);
 
-// user routers ----------------------------------------------------
-app.post('/user/signup',upload.single('profilePhoto'), signupUser);
-app.post('/user/login', loginUser);
-app.get('/user/find', findUser);
-app.get('/user/:input/find', findUser);
-app.get('/user/profile',userAuthMiddleware ,getSelfProfile);
-app.get('/user/:username/profile',userAuthMiddleware,getUser);
-app.get('/user/edit/:nickName',userAuthMiddleware,changeNickName);
-app.get('/user/:username/follow',userAuthMiddleware,followUser);
-app.get('/user/:username/unfollow',userAuthMiddleware,unfollowUser);
-app.get('/user/logout',userAuthMiddleware,logoutUser); 
-app.get('/user/group/:groupId/:targetUsername/remove',userAuthMiddleware,removeUserFromGroup);
 
-// action on groups
-app.get('/user/group/:name/create',userAuthMiddleware,createGroup);
-app.get('/user/group/:groupId/inviteCode/generate',userAuthMiddleware,getInviteCode);
-app.get('/user/group/:inviteCode/join',userAuthMiddleware,joinGroup);
-app.get('/user/search/group/:name',userAuthMiddleware,searchGroupsByName);
-app.get('/user/group',userAuthMiddleware,getGroups);
-app.get('/user/group/:groupId/exit',userAuthMiddleware,exitGroup);
+// =============================================================================
+// SERVER HEALTH CHECK ROUTE
+// =============================================================================
 
-// action on chat
-app.post('/user/group/:groupId/chat/new',userAuthMiddleware,createNewChat); // working till here
-app.get('/user/group/:groupId/chat/:chatId/delete',userAuthMiddleware,deleteChatBySender);
-app.get('/user/group/:groupId/chat',userAuthMiddleware,getChatsOfGroup);
-
-// action on report
-app.post('/user/group/:groupId/chat/:chatId/report',userAuthMiddleware,createReport);
-
-app.get('/{*any}',(req,res)=>{
-  res.status(200).json({message : "This is global get page"});
+app.get('/health', (req,res)=>{
+  return ApiResponse.success(res, 200, "Server is running perfectly");
 });
 
-app.post('/{*any}',(req,res)=>{
-  res.status(200).json({message : "This is global post page"});
+// =============================================================================
+// GLOBAL FALLBACK ROUTES
+// =============================================================================
+
+app.get('/{*any}', (req, res) => {
+  return ApiResponse.success(res, 200, "This is global get page");
 });
+
+app.post('/{*any}', (req, res) => {
+  return ApiResponse.success(res, 200, "This is global post page");
+});
+
+export default app;
