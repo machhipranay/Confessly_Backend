@@ -1,5 +1,5 @@
 import express from 'express';
-import { loginDeveloper, signupDeveloper, logoutDeveloper } from '../controller/developer.js';
+import { loginDeveloper, signupDeveloper, logoutDeveloper, removeDeveloper } from '../controller/developer.js';
 import { banUser } from '../controller/user.js';
 import { devAuthMiddleware } from '../service/devAuth.js';
 
@@ -36,12 +36,13 @@ router.post('/login', loginDeveloper);
  * ROUTE       : Developer Signup (Internal / Maintenance)
  * URL         : /dev/signup
  * METHOD TYPE : POST
- * AUTH        : Public (No token required)
+ * AUTH        : Bearer Token Required (Developer Authorization)
  * 
  * DESCRIPTION : Registers a new developer account into the system. 
  *               Validates input payload against devValidation schema.
  * 
  * DATA REQUIRED:
+ *   - Headers          : Authorization: Bearer <dev_jwt_token>
  *   - Body (JSON):
  *       - username (string) [Required] : Lowercase letters only
  *       - password (string) [Required] : Min 6 chars, 1 uppercase, 1 number, 1 special char
@@ -92,5 +93,25 @@ router.get('/logout', logoutDeveloper);
  * -----------------------------------------------------------------------------
  */
 router.get('/user/:username/ban', devAuthMiddleware, banUser);
+
+/**
+ * -----------------------------------------------------------------------------
+ * ROUTE       : Remove Developer Account
+ * URL         : /dev/:username/remove
+ * METHOD TYPE : DELETE
+ * AUTH        : Bearer Token Required (Developer Authorization)
+ * 
+ * DESCRIPTION : Deletes a developer account from the database by username.
+ * 
+ * DATA REQUIRED:
+ *   - Headers          : Authorization: Bearer <dev_jwt_token>
+ *   - Params           : :username (string) - Username of the developer to remove
+ * 
+ * RETURNS     :
+ *   - 200 OK           : { message: "dev removed" }
+ *   - 404 Not Found    : { message: "Error !!", error: <error_message> }
+ * -----------------------------------------------------------------------------
+ */
+router.delete('/:username/remove', devAuthMiddleware, removeDeveloper);
 
 export default router;

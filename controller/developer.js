@@ -123,16 +123,32 @@ export const logoutDeveloper = async (req,res)=>{
  *   - Params : :username (string)
  * 
  * RETURNS:
- *   - 200 OK  : { message: "dev removed" }
+ *   - 200 OK  : { message: "developer removed" }
  *   - 404 Err : { message: "Error !!", error }
  * -----------------------------------------------------------------------------
  */
-export const removeDeveloper = async (req,res)=>{
-  try{
-    await Developer.deleteOne({username : req.params.username});
-    return res.status(200).json({message : "dev removed"});
+export const removeDeveloper = async (req, res) => {
+  try {
+    const { username } = req.params;
+
+    const result = await Developer.deleteOne({ username });
+
+    // Developer not found
+    if (result.deletedCount === 0) {
+      return res.status(404).json({
+        message: "Developer not found"
+      });
+    }
+
+    // Successfully deleted
+    return res.status(200).json({
+      message: "Developer removed successfully"
+    });
+
+  } catch (error) {
+    return res.status(500).json({
+      message: "Error removing developer",
+      error: error.message
+    });
   }
-  catch(error) {
-    return res.stauts(404).json({message : "Error !!", error: error.message});
-  }
-}
+};
